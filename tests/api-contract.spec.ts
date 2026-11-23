@@ -22,7 +22,7 @@ test.describe("OpenAPI document", () => {
 
     const doc = await res.json();
     expect(doc.openapi).toMatch(/^3\./);
-    expect(doc.info.title).toBe("PulseCommerce API");
+    expect(doc.info.title).toBe("Setups Works Growth API");
 
     // Endpoints that exist must be documented; the document is only useful if
     // it stays in step with the routes.
@@ -65,7 +65,7 @@ test.describe("with nothing connected", () => {
     expect(body.config).toBeNull();
   });
 
-  test("the WhatsApp gateway reports disconnected", async ({ request }) => {
+  test("WhatsApp reports not linked", async ({ request }) => {
     const res = await request.get("/api/whatsapp/settings");
     expect(res.ok()).toBeTruthy();
     expect((await res.json()).connected).toBe(false);
@@ -75,7 +75,9 @@ test.describe("with nothing connected", () => {
     for (const path of ["/api/whatsapp/session", "/api/whatsapp/chats"]) {
       const res = await request.get(path);
       expect(res.status(), path).toBe(409);
-      expect((await res.json()).error, path).toContain("gateway");
+      // No engine in the test environment (and no store, for chats): a clear
+      // refusal naming what is missing, never a crash.
+      expect((await res.json()).error, path).toMatch(/whatsapp|store/i);
     }
   });
 });

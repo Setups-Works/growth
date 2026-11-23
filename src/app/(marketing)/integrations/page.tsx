@@ -174,7 +174,7 @@ export default function IntegrationsPage() {
             <div className="relative overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
               <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2.5">
                 <BrandMark icon={BRANDS.woocommerce} className="size-3.5 text-muted-foreground" />
-                <p className="text-xs font-medium">Permissions granted to PulseCommerce</p>
+                <p className="text-xs font-medium">Permissions granted to Setups Works Growth</p>
               </div>
               {SCOPES.map(([resource, detail, granted], i) => (
                 <div key={resource}>

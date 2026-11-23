@@ -31,6 +31,32 @@ export interface ChangelogRelease {
 
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    date: "2026-11-23",
+    title: "Setups Works Growth, and WhatsApp by QR code",
+    changes: [
+      {
+        kind: "new",
+        text: "PulseCommerce is now Growth by Setups Works — same product, new name.",
+      },
+      {
+        kind: "new",
+        text: "Link WhatsApp by scanning a QR code in Settings → WhatsApp, just like WhatsApp Web. No separate gateway to run and no API key to paste — campaigns, flows, abandoned-checkout reminders, order confirmations, the inbox and the auto-reply menu all send from your linked number.",
+      },
+      {
+        kind: "improved",
+        text: "Sign in with your email and password, reset a forgotten password by email, and change it any time in Settings → Security. Sign-in with Google has been retired.",
+      },
+      {
+        kind: "improved",
+        text: "The whole app now runs from one docker compose command, on any server you choose.",
+      },
+      {
+        kind: "fixed",
+        text: "The Acquisition page shows where orders came from again, product and customer names no longer show codes like “&amp;”, and dashboards load faster — each order is now stored with only the fields reports use.",
+      },
+    ],
+  },
+  {
     date: "2026-09-08",
     title: "A Lite plan",
     changes: [
@@ -178,7 +204,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     changes: [
       {
         kind: "new",
-        text: "A full REST API reference, an SDK, and a CLI (pulsecommerce-sdk / pulsecommerce-cli on npm), with browser-based login for the CLI.",
+        text: "A full REST API reference, an SDK, and a CLI (growth-sdk / growth-cli on npm), with browser-based login for the CLI.",
       },
     ],
   },
@@ -205,7 +231,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     changes: [
       {
         kind: "new",
-        text: "PulseCommerce became a real multi-tenant product: any number of independent accounts, each with their own connected store, API keys, and WhatsApp connection.",
+        text: "Setups Works Growth became a real multi-tenant product: any number of independent accounts, each with their own connected store, API keys, and WhatsApp connection.",
       },
       {
         kind: "new",

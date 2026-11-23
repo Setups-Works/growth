@@ -13,7 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabaseBrowser } from "@/lib/supabase/client";
 
 interface SessionState {
   signedIn: boolean;
@@ -48,21 +47,10 @@ export function AccountMenu() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-
-    /*
-     * Supabase refreshes tokens and can sign someone out in another tab. The
-     * subscription keeps this in step with that rather than with whenever the
-     * component last happened to mount.
-     */
-    const { data } = supabaseBrowser().auth.onAuthStateChange(() => {
-      void load();
-      router.refresh();
-    });
-    return () => data.subscription.unsubscribe();
-  }, [load, router]);
+  }, [load]);
 
   const signOut = async () => {
-    await supabaseBrowser().auth.signOut();
+    await fetch("/api/auth/logout", { method: "POST" });
     // Refresh rather than push: server components hold the old session in
     // their rendered output, and only a refresh re-runs them.
     router.refresh();

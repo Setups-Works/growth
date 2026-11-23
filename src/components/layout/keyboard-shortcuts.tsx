@@ -90,13 +90,13 @@ export function KeyboardShortcuts() {
 
       if (event.key.toLowerCase() === "g") {
         // Arm the chord; the next key decides where to go.
-        window.__pulseChordAt = Date.now();
+        window.__swChordAt = Date.now();
         return;
       }
 
-      const armedAt = window.__pulseChordAt ?? 0;
+      const armedAt = window.__swChordAt ?? 0;
       if (Date.now() - armedAt > CHORD_WINDOW_MS) return;
-      window.__pulseChordAt = 0;
+      window.__swChordAt = 0;
 
       const href = Object.keys(NAV_SHORTCUTS).find(
         (path) => NAV_SHORTCUTS[path] === event.key.toLowerCase(),
@@ -185,6 +185,6 @@ function Key({ children }: { children: React.ReactNode }) {
 declare global {
   interface Window {
     /** Timestamp of the last `g` press, for chord detection. */
-    __pulseChordAt?: number;
+    __swChordAt?: number;
   }
 }

@@ -8,5 +8,6 @@
  * These are only trustworthy because Proxy deletes any inbound copy before
  * setting its own. Nothing else may set them.
  */
-export const USER_ID_HEADER = "x-pulse-user-id";
-export const USER_EMAIL_HEADER = "x-pulse-user-email";
+export const USER_ID_HEADER = "x-sw-user-id";
+export const USER_EMAIL_HEADER = "x-sw-user-email";
+export const SCOPES_HEADER = "x-sw-scopes";

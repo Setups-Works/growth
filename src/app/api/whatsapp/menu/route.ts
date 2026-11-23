@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireTenant } from "@/lib/auth/tenant";
-import { WhatsAppApiError, WhatsAppClient } from "@/lib/whatsapp/client";
+import { isSessionSendable, WhatsAppApiError, WhatsAppClient } from "@/lib/whatsapp/client";
 import { readWhatsAppConfig } from "@/lib/whatsapp/config";
 import {
   EMPTY_MENU,
@@ -20,10 +20,9 @@ export const dynamic = "force-dynamic";
 /**
  * The inbound menu bot's configuration.
  *
- * A thin, deliberate proxy to the gateway's plugin API. It exists so the menu
- * can be edited on a screen rather than by hand-writing JSON with an admin key
- * — and so that key stays on the server, which is the same rule the rest of the
- * gateway integration follows.
+ * A thin proxy to the WhatsApp engine's per-account `chat-flow` plugin, which
+ * answers inbound messages (whatsapp/src/menu-bot.mjs). The engine key stays on
+ * the server.
  */
 
 /**
@@ -63,13 +62,16 @@ export async function GET(request: Request) {
   const gateway = await client(resolved.value.userId);
   if (!gateway) {
     return NextResponse.json(
-      { error: "No WhatsApp gateway is connected.", code: "gateway_not_connected" },
+      { error: "WhatsApp is not enabled on this server.", code: "gateway_not_connected" },
       { status: 409 },
     );
   }
 
   try {
-    const plugin = await gateway.getPlugin(PLUGIN_ID);
+    const [plugin, session] = await Promise.all([
+      gateway.getPlugin(PLUGIN_ID),
+      gateway.getSession().catch(() => null),
+    ]);
     const raw = (plugin.config ?? {}) as Partial<MenuConfig>;
 
     /*
@@ -88,7 +90,9 @@ export async function GET(request: Request) {
     return NextResponse.json({
       menu,
       enabled: plugin.status === "enabled",
-      installed: true,
+      // The menu bot is built into the engine; what can be missing is a linked
+      // number for it to answer from.
+      installed: session ? isSessionSendable(session) : false,
       version: plugin.version ?? null,
     });
   } catch (error) {
@@ -109,7 +113,7 @@ export async function PUT(request: Request) {
   const gateway = await client(resolved.value.userId);
   if (!gateway) {
     return NextResponse.json(
-      { error: "No WhatsApp gateway is connected.", code: "gateway_not_connected" },
+      { error: "WhatsApp is not enabled on this server.", code: "gateway_not_connected" },
       { status: 409 },
     );
   }

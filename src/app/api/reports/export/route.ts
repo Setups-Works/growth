@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     // last-sync timestamp are the whole cache key, so a repeat export of the
     // same range never has to pay for reassembling the raw mirror.
     const result = await getAnalyticsForVersion(
-      { storeUrl: store.url, fetchedAt: store.lastSyncAt ?? "" },
+      { storeUrl: store.url, fetchedAt: store.lastSyncAt ?? "", storeId: store.id },
       () => loadSnapshot(store),
       {
         range: from && to ? { from, to } : undefined,

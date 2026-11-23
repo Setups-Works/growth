@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { currentUser } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/auth/current-user";
 import { readStoreConfig } from "@/lib/store/config";
 import { databaseConfigured } from "@/lib/db/client";
 
@@ -49,7 +49,7 @@ export default async function ConnectPage({
           <div className="flex flex-col items-center gap-4 text-center">
             <Image
               src="/logo.svg"
-              alt="PulseCommerce"
+              alt="Setups Works Growth"
               width={56}
               height={56}
               className="rounded-xl dark:hidden"
@@ -57,7 +57,7 @@ export default async function ConnectPage({
             />
             <Image
               src="/logo-dark.svg"
-              alt="PulseCommerce"
+              alt="Setups Works Growth"
               width={56}
               height={56}
               className="hidden rounded-xl dark:block"
@@ -66,7 +66,7 @@ export default async function ConnectPage({
             <div className="space-y-2">
               <h1 className="text-2xl font-semibold tracking-tight">Connect your WooCommerce store</h1>
               <p className="mx-auto max-w-md text-sm leading-relaxed text-pretty text-muted-foreground">
-                PulseCommerce analyses your real orders and ships with no sample data, so there is nothing to show
+                Setups Works Growth analyses your real orders and ships with no sample data, so there is nothing to show
                 until a store is authorized.
               </p>
             </div>
@@ -139,7 +139,7 @@ export default async function ConnectPage({
 
       <footer className="border-t">
         <div className="mx-auto flex max-w-xl flex-wrap items-center justify-between gap-4 px-4 py-6 text-xs text-muted-foreground">
-          <p>PulseCommerce, advanced analytics for WooCommerce.</p>
+          <p>Setups Works Growth, advanced analytics for WooCommerce.</p>
           <div className="flex items-center gap-3">
             <span className="leading-tight">Built by</span>
             {/* The mark ships in both polarities; CSS picks one per theme. */}

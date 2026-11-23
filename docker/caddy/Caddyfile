@@ -1,0 +1,7 @@
+# Automatic HTTPS (Let's Encrypt) in front of the app. Enabled with
+# `docker compose --profile https up -d`. DOMAIN must already point (DNS A
+# record) at this machine, with ports 80 and 443 open.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}

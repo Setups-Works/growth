@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
   const config = await readWhatsAppConfig(userId);
   if (!config) {
-    return NextResponse.json({ error: "No WhatsApp gateway is connected." }, { status: 409 });
+    return NextResponse.json({ error: "WhatsApp is not enabled on this server." }, { status: 409 });
   }
 
   const client = new WhatsAppClient(config);
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
   const config = await readWhatsAppConfig(userId);
   if (!config) {
-    return NextResponse.json({ error: "No WhatsApp gateway is connected." }, { status: 409 });
+    return NextResponse.json({ error: "WhatsApp is not enabled on this server." }, { status: 409 });
   }
 
   const client = new WhatsAppClient(config);

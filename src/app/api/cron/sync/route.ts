@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAnalyticsForVersion } from "@/lib/analytics/cache";
 import { db } from "@/lib/db/client";
+import { pruneStore, sweepShared } from "@/lib/analytics/shared-cache";
 import { forgetSnapshot, readSnapshot } from "@/lib/woo/mirror";
 import { syncStore } from "@/lib/woo/sync";
 
@@ -9,7 +10,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * Syncs every connected store. Called by Supabase's scheduler.
+ * Syncs every connected store. Called every 10 minutes by the `cron` service
+ * (docker/cron/crontab).
  *
  * Authenticates with CRON_SECRET as a bearer token — the scheduler has no
  * session and no API key, and this endpoint reads every tenant's credentials,
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
         select last_sync_at from stores where id = ${store.id}
       `;
       await getAnalyticsForVersion(
-        { storeUrl: store.url, fetchedAt: freshLastSyncAt?.toISOString() ?? "" },
+        { storeUrl: store.url, fetchedAt: freshLastSyncAt?.toISOString() ?? "", storeId: store.id },
         () =>
           readSnapshot({
             id: store.id,
@@ -108,6 +110,8 @@ export async function POST(request: Request) {
             lastSyncAt: freshLastSyncAt?.toISOString() ?? null,
           }),
       ).catch(() => {});
+      // Cached results keyed on earlier syncs can never be read again.
+      if (freshLastSyncAt) await pruneStore(store.id, freshLastSyncAt);
       results.push({ store: store.url, ok: true, ...result });
     } catch (error) {
       // One unreachable store must not stop the rest: a merchant who revoked
@@ -119,6 +123,9 @@ export async function POST(request: Request) {
       });
     }
   }
+
+  // Entries not tied to a store (or orphaned by a race) are dropped by age.
+  await sweepShared(1);
 
   return NextResponse.json({ ran: results.length, results });
 }

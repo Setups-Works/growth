@@ -56,8 +56,8 @@ on top of it.
 
 ## mirror.ts / sync.ts
 
-The sync that runs every 10 minutes via Supabase pg_cron (see root
-`AGENTS.md`) — orders stores by staleness, and an already-synced store costs
+The sync that runs every 10 minutes via the `cron` container
+(`docker/cron/crontab`) — orders stores by staleness, and an already-synced store costs
 one cheap incremental query rather than a full re-pull. If you're debugging
 "why does this store show stale data," check `stores` for its last sync
 timestamp and the per-store lock before assuming the cron job itself isn't

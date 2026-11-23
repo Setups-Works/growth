@@ -9,7 +9,7 @@ Unless the route is genuinely public (webhook-style, like
 `auth/woo/callback`) or a cron endpoint gated by `CRON_SECRET`, it must call
 `requireTenant`/`requireStore` and scope its queries by the result. See
 `src/lib/auth/CLAUDE.md` and the root `AGENTS.md` for why — the server
-reaches Postgres as the table owner, so RLS is not doing this for you.
+reaches Postgres as the table owner and there is no RLS, so nothing else does this for you.
 
 ## 2. It's on an allowlist in `src/proxy.ts`
 
@@ -17,7 +17,7 @@ Next 16's replacement for `middleware.ts`. Three sets decide what a request
 needs before it reaches your handler:
 
 - `PUBLIC_API` — no session or key required at all (auth start/callback,
-  cron endpoints that check their own secret, CLI device-login start/poll)
+  cron endpoints that check their own secret, sign-in/up/reset, health)
 - `READ_ONLY_POSTS` — a POST that only reads (previews, dry runs) needs
   `read` scope rather than `write` when called with an API key
 - `PROTECTED_PAGES` — browser pages that redirect to `/login` when signed out
@@ -40,11 +40,9 @@ inventing new conventions.
 
 ## Cron routes specifically
 
-`src/app/api/cron/*` routes are **not called by Vercel Cron** — see the root
-`AGENTS.md`, this was a real, previously-uncaught documentation bug. They're
-called by Supabase pg_cron + pg_net, authenticated with the same
-constant-time `CRON_SECRET` bearer check pattern in every one of them
-(`sync`, `flows`, `abandoned-checkouts`). If you add a new scheduled route,
-copy that check verbatim rather than writing a new one, and add the actual
-schedule to a new migration in `supabase/migrations/` — never to
-`vercel.json`, which this project doesn't use for scheduling at all.
+`src/app/api/cron/*` routes are called by the `cron` container
+(`docker/cron/crontab`), authenticated with the same constant-time
+`CRON_SECRET` bearer check in every one of them (`sync`, `flows`,
+`abandoned-checkouts`). If you add a new scheduled route, copy that check
+verbatim rather than writing a new one, add it to `PUBLIC_API`, and add its
+schedule as a new line in `docker/cron/crontab`.

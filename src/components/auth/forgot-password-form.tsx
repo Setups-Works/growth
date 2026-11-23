@@ -7,13 +7,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { postJson } from "@/lib/auth/client";
 
 /**
  * Requests a reset link. Never says whether the address has an account —
- * Supabase's own resetPasswordForEmail doesn't error on an unknown address
- * either, which is what stops this from being a way to check who has signed
- * up here.
+ * /api/auth/forgot answers the same either way, which is what stops this from
+ * being a way to check who has signed up here.
  */
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -27,19 +26,7 @@ export function ForgotPasswordForm() {
     setError(null);
 
     try {
-      const { error: resetError } = await supabaseBrowser().auth.resetPasswordForEmail(email, {
-        // Straight to /reset-password, not through /auth/callback: a
-        // recovery link delivers its tokens in the URL *hash*
-        // (#access_token=...&type=recovery), which never reaches a server
-        // route at all — only the browser ever sees a fragment. The
-        // Supabase client on /reset-password picks it up itself once
-        // it's the page that's actually loaded. Must also be added to
-        // Supabase Dashboard -> Authentication -> URL Configuration ->
-        // Redirect URLs, or Supabase silently falls back to the bare
-        // Site URL instead of honouring this.
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (resetError) throw resetError;
+      await postJson("/api/auth/forgot", { email });
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");

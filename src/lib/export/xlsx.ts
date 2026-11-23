@@ -48,7 +48,7 @@ export async function buildWorkbook(result: AnalyticsResult, sheets: Sheet[]): P
   const wb = new ExcelJS.Workbook();
   const narrative = buildNarrative(result);
 
-  wb.creator = "PulseCommerce Analytics";
+  wb.creator = "Setups Works Growth Analytics";
   wb.created = new Date();
   wb.properties.date1904 = false;
 

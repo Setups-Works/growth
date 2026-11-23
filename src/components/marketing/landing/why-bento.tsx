@@ -6,7 +6,7 @@ import { Section, SectionHeading } from "@/components/marketing/sections";
 import { cn } from "@/lib/utils";
 
 /**
- * Why PulseCommerce, as a bento grid.
+ * Why Setups Works Growth, as a bento grid.
  *
  * Each card carries an illustration built from the thing it describes rather
  * than a stock graphic: the segmentation card shows segments, the WhatsApp
@@ -226,7 +226,7 @@ export function WhyBento() {
   return (
     <Section id="why">
       <SectionHeading
-        eyebrow="Why PulseCommerce"
+        eyebrow="Why Setups Works Growth"
         title="Not another dashboard"
         body="A dashboard tells you revenue is down. This tells you which customers stopped buying, what they used to buy, and sends them a message about it."
       />

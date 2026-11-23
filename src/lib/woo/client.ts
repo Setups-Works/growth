@@ -78,7 +78,7 @@ export class WooClient {
   private headers(): HeadersInit {
     const h: Record<string, string> = {
       Accept: "application/json",
-      "User-Agent": "PulseCommerce-Analytics/1.0",
+      "User-Agent": "SetupsWorksGrowth/1.0",
     };
     if (!this.useQueryAuth) {
       h.Authorization = `Basic ${Buffer.from(`${this.key}:${this.secret}`).toString("base64")}`;

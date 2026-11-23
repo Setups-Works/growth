@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { MagicLinkCatcher } from "@/components/auth/magic-link-catcher";
 import { ScrollProgress } from "@/components/ui/scroll-progress";
 import { AiAgent } from "@/components/marketing/landing/ai-agent";
 import { Automation } from "@/components/marketing/landing/automation";
@@ -17,11 +16,12 @@ import { WhyBento } from "@/components/marketing/landing/why-bento";
 import { landingSchema, SITE_DESCRIPTION } from "@/lib/marketing/schema";
 
 export const metadata: Metadata = {
-  title: "PulseCommerce — AI Commerce Intelligence for WooCommerce",
+  // Absolute: the layout's "%s · Setups Works Growth" template would repeat the name.
+  title: { absolute: "Growth by Setups Works — AI Commerce Intelligence for WooCommerce" },
   description: SITE_DESCRIPTION,
   alternates: { canonical: "/" },
   openGraph: {
-    title: "PulseCommerce — AI Commerce Intelligence for WooCommerce",
+    title: "Growth by Setups Works — AI Commerce Intelligence for WooCommerce",
     description: SITE_DESCRIPTION,
     url: "/",
     type: "website",
@@ -64,7 +64,6 @@ export default function LandingPage() {
       />
 
       <ScrollProgress className="h-0.5 bg-linear-to-r from-primary via-chart-7 to-primary" />
-      <MagicLinkCatcher />
 
       <main>
         <Hero />

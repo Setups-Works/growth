@@ -25,7 +25,7 @@ const errorResponse = (description: string) => ({
 export const openApiDocument = {
   openapi: "3.1.0",
   info: {
-    title: "PulseCommerce API",
+    title: "Setups Works Growth API",
     version: "1.0.0",
     description:
       "Analytics and WhatsApp campaigns for a connected WooCommerce store.\n\n" +
@@ -36,16 +36,16 @@ export const openApiDocument = {
       "filter and resolve recipients themselves, so no request can address someone " +
       "who is not a customer of the connected store or who has opted out.\n\n" +
       "## Authentication\n\n" +
-      "Every endpoint requires an API key except the connect flow, the scheduler " +
-      "hooks (which authenticate with `CRON_SECRET`), the first two legs of `pulse " +
-      "login` (see the CLI login tag), and this document.\n\n" +
+      "Every endpoint requires an API key or a browser session except sign-in, " +
+      "sign-up and password reset, the connect flow, the scheduler hooks (which " +
+      "authenticate with `CRON_SECRET`), and this document.\n\n" +
       "Each key belongs to an account, and an account owns its own WooCommerce " +
       "store and WhatsApp connection. A key therefore sees exactly one tenant's " +
       "data — yours — and there is no parameter that changes which.\n\n" +
       "Create a key in **Settings → API keys**, then send it on each request:\n\n" +
       "```bash\n" +
       "curl https://your-deployment/api/analytics \\\n" +
-      '  -H "Authorization: Bearer pc_live_…"\n' +
+      '  -H "Authorization: Bearer sw_live_…"\n' +
       "```\n\n" +
       "A missing or invalid key returns 401; a key without the scope an endpoint " +
       "needs returns 403 naming it. Both include a `hint` field saying what to do.\n\n" +
@@ -54,7 +54,7 @@ export const openApiDocument = {
       "## Freshness\n\n" +
       "Analytics are computed from a local mirror of your store rather than by " +
       "calling WooCommerce on each request, which is what makes them fast. The " +
-      "mirror refreshes every two hours; `GET /api/sync` reports when it last " +
+      "mirror refreshes every ten minutes; `GET /api/sync` reports when it last " +
       "ran, and `POST /api/sync` pulls immediately.",
   },
   servers: [{ url: "/", description: "This deployment" }],
@@ -68,15 +68,14 @@ export const openApiDocument = {
     { name: "Analytics", description: "Computed metrics from the cached store snapshot" },
     { name: "Store", description: "WooCommerce connection and data window" },
     { name: "Reports", description: "Excel, PDF and CSV exports" },
-    { name: "WhatsApp", description: "Gateway connection and session" },
+    { name: "WhatsApp", description: "Linking a number (QR) and session state" },
     { name: "Campaigns", description: "Audience resolution and broadcasts" },
     { name: "Flows", description: "Multi-step campaigns advanced on a schedule" },
     { name: "Recovery", description: "Abandoned-checkout reminders over WhatsApp" },
     { name: "Assistant", description: "Reads the store and proposes actions for approval" },
     { name: "Inbox", description: "Conversations and replies" },
-    { name: "Auth", description: "Optional password sessions" },
+    { name: "Auth", description: "Email and password accounts, sessions and password reset" },
     { name: "API keys", description: "Credentials for calling this API from your own code" },
-    { name: "CLI login", description: "Device-authorization login for `pulse login`" },
     { name: "Sync", description: "The local mirror of your WooCommerce store" },
     { name: "Billing", description: "Plans, usage, invoices and Razorpay subscriptions" },
     { name: "Order confirmations", description: "WhatsApp thank-you messages sent on new orders" },
@@ -394,7 +393,7 @@ export const openApiDocument = {
                 key: {
                   type: "string",
                   description: "The secret. Shown once.",
-                  examples: ["pc_live_x7Qa2M0pLd8vRt4WnJ6yBc1EgHs5UfZk9Ni3OqTr"],
+                  examples: ["sw_live_x7Qa2M0pLd8vRt4WnJ6yBc1EgHs5UfZk9Ni3OqTr"],
                 },
                 record: { $ref: "#/components/schemas/ApiKeyRecord" },
               },
@@ -430,117 +429,6 @@ export const openApiDocument = {
           },
           403: errorResponse("Authenticated with an API key rather than a session."),
           404: errorResponse("No active key with that id."),
-        },
-      },
-    },
-
-    "/api/cli/auth/start": {
-      post: {
-        tags: ["CLI login"],
-        summary: "Begin a device-authorization login",
-        // Public: there is no key to send yet — a device code stands in for
-        // one until a human approves it in an already-signed-in browser.
-        security: [],
-        description:
-          "Step one of `pulse login`. Returns a device code (the CLI holds this) and a " +
-          "short user code and verification URL (the human visits this, and compares the " +
-          "code shown there against what their terminal printed).",
-        requestBody: {
-          content: json({
-            type: "object",
-            properties: {
-              scopes: {
-                type: "array",
-                items: { type: "string", enum: ["read", "write"] },
-                description: "Defaults to read and write.",
-              },
-            },
-          }),
-        },
-        responses: {
-          200: {
-            description: "A device code, a user code, and where to approve it",
-            content: json({
-              type: "object",
-              properties: {
-                deviceCode: { type: "string" },
-                userCode: { type: "string", examples: ["WXYZ-2345"] },
-                verificationUrl: { type: "string", format: "uri" },
-                expiresIn: { type: "integer", description: "Seconds until the code expires" },
-                interval: { type: "integer", description: "Minimum seconds between polls" },
-              },
-            }),
-          },
-          400: errorResponse("Invalid scopes"),
-        },
-      },
-    },
-
-    "/api/cli/auth/poll": {
-      post: {
-        tags: ["CLI login"],
-        summary: "Check whether a device login has been approved",
-        security: [],
-        description:
-          "Step three of `pulse login`, called on the interval `start` returned. Returns " +
-          "`{ status: \"approved\", key, record }` exactly once — the key is minted at the " +
-          "moment a poll first observes the login approved, and cannot be retrieved again.",
-        requestBody: {
-          required: true,
-          content: json({
-            type: "object",
-            properties: { deviceCode: { type: "string" } },
-            required: ["deviceCode"],
-          }),
-        },
-        responses: {
-          200: {
-            description: "pending, denied, expired, or approved with a key",
-            content: json({
-              oneOf: [
-                { type: "object", properties: { status: { const: "pending" } } },
-                { type: "object", properties: { status: { const: "denied" } } },
-                { type: "object", properties: { status: { const: "expired" } } },
-                {
-                  type: "object",
-                  properties: {
-                    status: { const: "approved" },
-                    key: { type: "string", examples: ["pc_live_…"] },
-                    record: { $ref: "#/components/schemas/ApiKeyRecord" },
-                  },
-                },
-              ],
-            }),
-          },
-        },
-      },
-    },
-
-    "/api/cli/auth/approve": {
-      post: {
-        tags: ["CLI login"],
-        summary: "Approve or deny a device login",
-        description:
-          "Step two of `pulse login` — what the dashboard page at /cli-login calls once a " +
-          "signed-in person clicks Approve or Deny. Requires a dashboard session, the same " +
-          "reasoning as creating a key directly: an API key must not be able to mint a login " +
-          "for itself or anyone else.",
-        requestBody: {
-          required: true,
-          content: json({
-            type: "object",
-            properties: {
-              userCode: { type: "string" },
-              action: { type: "string", enum: ["approve", "deny"] },
-            },
-            required: ["userCode", "action"],
-          }),
-        },
-        responses: {
-          200: { description: "Recorded", content: json({ type: "object", properties: { ok: { type: "boolean" } } }) },
-          401: errorResponse("Not signed in"),
-          403: errorResponse("Authenticated with an API key rather than a session"),
-          409: errorResponse("The code was already used, denied, or has expired"),
         },
       },
     },
@@ -717,16 +605,16 @@ export const openApiDocument = {
     "/api/whatsapp/settings": {
       get: {
         tags: ["WhatsApp"],
-        summary: "Gateway connection and live session state",
+        summary: "Whether a number is linked, and sending preferences",
         responses: {
           200: {
-            description: "Connection state, key masked",
+            description: "Link state and preferences",
             content: json({
               type: "object",
               properties: {
-                connected: { type: "boolean" },
-                fromEnv: { type: "boolean", description: "Set by environment variables" },
-                ready: { type: "boolean", description: "Session linked and engine running" },
+                available: { type: "boolean", description: "False when this server runs no WhatsApp engine" },
+                connected: { type: "boolean", description: "A number is linked and sendable" },
+                ready: { type: "boolean" },
                 config: { type: "object", nullable: true },
                 session: { type: "object", nullable: true },
               },
@@ -736,34 +624,29 @@ export const openApiDocument = {
       },
       put: {
         tags: ["WhatsApp"],
-        summary: "Connect a gateway",
-        description: "Verified against the gateway before being saved.",
+        summary: "Save the default country code and sending pace",
         requestBody: {
           required: true,
           content: json({
             type: "object",
             properties: {
-              baseUrl: { type: "string" },
-              apiKey: { type: "string" },
-              sessionId: { type: "string", description: "Adopted automatically if omitted" },
               defaultDialCode: { type: "string", example: "91" },
               delayBetweenMessagesMs: { type: "integer", minimum: 1000, maximum: 60000 },
             },
-            required: ["baseUrl", "apiKey"],
           }),
         },
         responses: {
-          200: { description: "Connected", content: json({ type: "object" }) },
-          409: errorResponse("Set by environment variables, or the gateway has no usable session"),
-          422: errorResponse("Invalid URL or body"),
+          200: { description: "Saved", content: json({ type: "object" }) },
+          422: errorResponse("Invalid body"),
         },
       },
       delete: {
         tags: ["WhatsApp"],
-        summary: "Disconnect the gateway",
+        summary: "Unlink the WhatsApp number",
+        description: "Logs the linked device out of WhatsApp and deletes the session's local data.",
         responses: {
-          200: { description: "Disconnected", content: json({ type: "object" }) },
-          409: errorResponse("Set by environment variables"),
+          200: { description: "Unlinked", content: json({ type: "object" }) },
+          502: errorResponse("The WhatsApp engine could not be reached"),
         },
       },
     },
@@ -773,7 +656,7 @@ export const openApiDocument = {
         tags: ["WhatsApp"],
         summary: "Session state, and the pairing QR when one is offered",
         description:
-          "The QR is proxied rather than linked, so the gateway key never reaches a page.",
+          "Scan it from WhatsApp → Linked devices. The engine key never reaches a page.",
         responses: {
           200: {
             description: "State, plus a QR while unlinked",
@@ -786,7 +669,7 @@ export const openApiDocument = {
               },
             }),
           },
-          409: errorResponse("No gateway connected"),
+          409: errorResponse("WhatsApp is not enabled on this server"),
         },
       },
       post: {
@@ -795,7 +678,7 @@ export const openApiDocument = {
         description: "Idempotent: a session already running is the wanted outcome, not an error.",
         responses: {
           200: { description: "Running", content: json({ type: "object" }) },
-          409: errorResponse("No gateway connected"),
+          409: errorResponse("WhatsApp is not enabled on this server"),
         },
       },
     },
@@ -1020,13 +903,13 @@ export const openApiDocument = {
         tags: ["Flows"],
         summary: "The inbound menu bot's configuration",
         description:
-          "Proxies the gateway's plugin API so the admin key stays on the server. " +
+          "Proxies the WhatsApp engine's plugin API so the admin key stays on the server. " +
           "Reports whether the extension is installed and whether it is currently answering; " +
           "not installed is a normal state, not an error.",
         responses: {
           200: { description: "The menu, and whether it is on", content: json({ type: "object" }) },
-          409: { description: "No gateway is connected" },
-          502: { description: "The gateway did not respond" },
+          409: { description: "WhatsApp is not enabled on this server" },
+          502: { description: "The WhatsApp engine did not respond" },
         },
       },
       put: {
@@ -1064,7 +947,7 @@ export const openApiDocument = {
         responses: {
           200: { description: "Saved" },
           422: { description: "Invalid menu — empty greeting, no options, or nested too deep" },
-          502: { description: "The gateway did not respond" },
+          502: { description: "The WhatsApp engine did not respond" },
         },
       },
     },
@@ -1177,9 +1060,8 @@ export const openApiDocument = {
         // in the handler. The scheduler has no session and no API key.
         security: [],
         description:
-          "Called by Supabase's scheduler (pg_cron, via the trigger_app_job helper in " +
-          "supabase/migrations/20260811170000_cron.sql) every 10 minutes, with the project's " +
-          "CRON_SECRET as a bearer token, and closed when that secret is unset. Up to 25 stores " +
+          "Called by the `cron` service in docker-compose.yml every 10 minutes, with the " +
+          "deployment's CRON_SECRET as a bearer token, and closed when that secret is unset. Up to 25 stores " +
           "are synced per run, ordered by staleness — never-synced stores first — so a run that " +
           "cannot finish everyone still makes progress on whoever is furthest behind rather than " +
           "repeatedly syncing the same few. One store's WooCommerce being unreachable does not " +
@@ -1199,9 +1081,8 @@ export const openApiDocument = {
         // in the handler. The scheduler has no session and no API key.
         security: [],
         description:
-          "Called by Supabase's scheduler (pg_cron, via the trigger_app_job helper in " +
-          "supabase/migrations/20260811170000_cron.sql) with the project's CRON_SECRET as a bearer " +
-          "token, and closed when that secret is unset. What is due is computed from stored " +
+          "Called by the `cron` service in docker-compose.yml daily at 04:30 UTC, with the " +
+          "deployment's CRON_SECRET as a bearer token, and closed when that secret is unset. What is due is computed from stored " +
           "timestamps, so a tick that is skipped, retried or runs late sends the same messages, " +
           "once. GET does the same work.",
         responses: {
@@ -1217,10 +1098,10 @@ export const openApiDocument = {
         summary: "Recover checkouts left pending, over WhatsApp",
         security: [],
         description:
-          "Called by Supabase's scheduler every five minutes, the same trigger_app_job mechanism " +
-          "as advance-flows and sync-stores, just far more often — a 30-minute recovery window " +
+          "Called by the `cron` service in docker-compose.yml every five minutes, the same " +
+          "mechanism as the flows and sync jobs, just far more often — a 30-minute recovery window " +
           "needs it. Reads WooCommerce live rather than the mirror, since the regular sync (every " +
-          "two hours) is too infrequent for this, and only for stores with abandonedCheckoutEnabled " +
+          "ten minutes) is too infrequent for this, and only for stores with abandonedCheckoutEnabled " +
           "set — this makes no WooCommerce call at all for a store that hasn't turned it on. Only " +
           "orders placed after recovery was switched on are ever considered, so turning it on " +
           "never messages an existing backlog as a batch. An eligible order left pending, on-hold " +
@@ -1437,9 +1318,9 @@ export const openApiDocument = {
       },
       post: {
         tags: ["Campaigns"],
-        summary: "Hand the next batch to the gateway",
+        summary: "Hand the next batch to the WhatsApp engine",
         description:
-          "One batch per call. The gateway paces its own sends, so a request that waited " +
+          "One batch per call. The WhatsApp engine paces its own sends, so a request that waited " +
           "for a batch to finish would outlive any serverless function. Recovers a stopped " +
           "engine automatically.",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
@@ -1449,13 +1330,13 @@ export const openApiDocument = {
             content: json({ $ref: "#/components/schemas/Progress" }),
           },
           404: errorResponse("No such broadcast"),
-          502: errorResponse("The gateway rejected the batch"),
+          502: errorResponse("The WhatsApp engine rejected the batch"),
         },
       },
       delete: {
         tags: ["Campaigns"],
         summary: "Stop a broadcast",
-        description: "Batches already accepted by the gateway still go out.",
+        description: "Batches already accepted by the WhatsApp engine still go out.",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: {
           200: { description: "Cancelled", content: json({ $ref: "#/components/schemas/Progress" }) },
@@ -1473,7 +1354,7 @@ export const openApiDocument = {
           "the inbox wait on a full order-history pull, so it degrades to raw numbers.",
         responses: {
           200: { description: "Conversations", content: json({ type: "object" }) },
-          409: errorResponse("No gateway connected"),
+          409: errorResponse("WhatsApp is not enabled on this server"),
         },
       },
     },
@@ -1586,38 +1467,130 @@ export const openApiDocument = {
     "/api/auth/session": {
       get: {
         tags: ["Auth"],
-        summary: "Whether password protection is on, and whether you are signed in",
+        summary: "Whether you are signed in, and how far through setup",
         // Public: gating the endpoint that reports whether you are signed in
         // would be circular.
         security: [],
         responses: { 200: { description: "Session state", content: json({ type: "object" }) } },
       },
+    },
+    "/api/auth/signup": {
+      post: {
+        tags: ["Auth"],
+        summary: "Create an account and sign in",
+        description: "Sets the HttpOnly session cookie. Closed when the server sets DISABLE_SIGNUPS=true.",
+        security: [],
+        requestBody: { required: true, content: json({
+            type: "object",
+            properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 } },
+            required: ["email", "password"],
+          }) },
+        responses: {
+          200: { description: "Signed up and signed in", content: json({ type: "object" }) },
+          400: errorResponse("Invalid email, or password too short"),
+          403: errorResponse("Sign-ups are closed on this server"),
+          409: errorResponse("An account with this email already exists"),
+          429: errorResponse("Too many attempts"),
+        },
+      },
+    },
+    "/api/auth/login": {
       post: {
         tags: ["Auth"],
         summary: "Sign in",
+        description: "Sets the HttpOnly session cookie. Rate limited per address and per email.",
         security: [],
-        requestBody: {
-          required: true,
-          content: json({
+        requestBody: { required: true, content: json({
             type: "object",
-            properties: { password: { type: "string" } },
-            required: ["password"],
-          }),
-        },
+            properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 } },
+            required: ["email", "password"],
+          }) },
         responses: {
           200: { description: "Signed in", content: json({ type: "object" }) },
-          401: errorResponse("Incorrect password"),
-          400: errorResponse("Password login is not configured"),
+          401: errorResponse("Incorrect email or password"),
+          429: errorResponse("Too many attempts"),
         },
       },
-      delete: {
+    },
+    "/api/auth/logout": {
+      post: {
         tags: ["Auth"],
         summary: "Sign out",
         security: [],
         responses: { 200: { description: "Signed out", content: json({ type: "object" }) } },
       },
     },
+    "/api/auth/password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Change your password",
+        description: "Browser sessions only; requires the current password.",
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            properties: { current: { type: "string" }, next: { type: "string", minLength: 8 } },
+            required: ["current", "next"],
+          }),
+        },
+        responses: {
+          200: { description: "Changed", content: json({ type: "object" }) },
+          400: errorResponse("Current password is incorrect, or the new one is too short"),
+          403: errorResponse("Authenticated with an API key rather than a session"),
+        },
+      },
+    },
+    "/api/auth/forgot": {
+      post: {
+        tags: ["Auth"],
+        summary: "Email a password-reset link",
+        description:
+          "Answers the same whether or not the address has an account. The one-time link is " +
+          "valid for an hour; without SMTP configured it is written to the server log instead.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: json({ type: "object", properties: { email: { type: "string" } }, required: ["email"] }),
+        },
+        responses: {
+          200: { description: "Accepted", content: json({ type: "object" }) },
+          429: errorResponse("Too many attempts"),
+        },
+      },
+    },
+    "/api/auth/reset": {
+      post: {
+        tags: ["Auth"],
+        summary: "Set a new password from a reset link",
+        description: "Consumes the token, sets the password and signs the user in.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            properties: { token: { type: "string" }, password: { type: "string", minLength: 8 } },
+            required: ["token", "password"],
+          }),
+        },
+        responses: {
+          200: { description: "Password set and signed in", content: json({ type: "object" }) },
+          400: errorResponse("Expired or already-used link, or password too short"),
+        },
+      },
+    },
 
+    "/api/health": {
+      get: {
+        tags: ["Analytics"],
+        summary: "Health check",
+        description: "200 when the app is up and can reach its database, 503 otherwise.",
+        security: [],
+        responses: {
+          200: { description: "Healthy", content: json({ type: "object" }) },
+          503: { description: "Database unreachable", content: json({ type: "object" }) },
+        },
+      },
+    },
     "/api/openapi": {
       get: {
         tags: ["Analytics"],
@@ -1658,7 +1631,7 @@ export const openApiDocument = {
         scheme: "bearer",
         description:
           "An API key, created in Settings → API keys. Send it as " +
-          "`Authorization: Bearer pc_live_…`; the header `X-API-Key: pc_live_…` " +
+          "`Authorization: Bearer sw_live_…`; the header `X-API-Key: sw_live_…` " +
           "is accepted as an alternative for clients that reserve `Authorization` " +
           "for something else.\n\n" +
           "The key is shown once, at creation, and only its digest is stored — " +
@@ -1672,7 +1645,7 @@ export const openApiDocument = {
       Session: {
         type: "apiKey",
         in: "cookie",
-        name: "pulse_session",
+        name: "sw_session",
         description:
           "The dashboard's own session, established by completing the WooCommerce " +
           "authorization flow. Browsers get this automatically; it is documented " +
@@ -1690,7 +1663,7 @@ export const openApiDocument = {
           display: {
             type: "string",
             description: "Abbreviated key, for recognising it in a list.",
-            examples: ["pc_live_a3Kd…9fQ2"],
+            examples: ["sw_live_a3Kd…9fQ2"],
           },
           scopes: { type: "array", items: { type: "string", enum: ["read", "write"] } },
           createdAt: { type: "string", format: "date-time" },

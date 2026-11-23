@@ -17,11 +17,6 @@
  */
 export function publicAppUrl(request: Request): string {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
-  // Vercel exposes the deployment host but not the scheme; it is always HTTPS.
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
 
   const url = new URL(request.url);
   const proto = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");

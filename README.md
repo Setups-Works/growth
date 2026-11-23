@@ -2,16 +2,17 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="public/logo-dark.svg">
-  <img src="public/logo.svg" alt="PulseCommerce" width="88" height="88">
+  <img src="public/logo.svg" alt="Setups Works Growth" width="88" height="88">
 </picture>
 
-# PulseCommerce
+# Growth <sub>by Setups Works</sub>
 
-**Analytics and WhatsApp campaigns for WooCommerce.**
+**Analytics and WhatsApp campaigns for WooCommerce** — a product of
+[Setups Works](https://setups.works).
 
 Know who your best customers are, which ones are about to leave, and what they
-buy — then message them on WhatsApp from the same screen, through a gateway you
-own.
+buy — then message them on WhatsApp from the same screen, from your own number linked
+by scanning a QR code.
 
 <p>
   <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white">
@@ -27,15 +28,15 @@ own.
 
 ## What this is
 
-WooCommerce tells you what sold. PulseCommerce tells you **who bought it, which
+WooCommerce tells you what sold. Setups Works Growth tells you **who bought it, which
 of them is slipping away, what they buy together, which products are about to
 run out, and what next month looks like** — and then lets you act on it.
 
 It is a self-hosted Next.js app. You authorize a store through WooCommerce's own
 app-authorization endpoint, it pulls your orders over the REST API, caches a
 snapshot, and derives every metric from that snapshot at request time. WhatsApp
-sending goes through a gateway on your own infrastructure, so customer numbers
-never reach a third-party messaging service.
+sending goes through your own linked number, from a service in the same
+deployment, so customer numbers never reach a third-party messaging service.
 
 > **There is no sample data anywhere in this codebase.** Every number you see
 > came from your store. A figure can never be a placeholder you mistook for real.
@@ -60,10 +61,10 @@ never reach a third-party messaging service.
 - [WhatsApp campaigns](#whatsapp-campaigns)
 - [Automated flows](#automated-flows)
 - [Abandoned checkout recovery](#abandoned-checkout-recovery)
-- [Gateway plugins and the menu bot](#gateway-plugins-and-the-menu-bot)
+- [The menu bot](#the-menu-bot)
 - [The assistant](#the-assistant)
 - [Multiple stores](#multiple-stores)
-- [Optional password protection](#optional-password-protection)
+- [Accounts and sign-in](#accounts-and-sign-in)
 - [Environment variables](#environment-variables)
 - [Reports and exports](#reports-and-exports)
 - [How the metrics are defined](#how-the-metrics-are-defined)
@@ -162,7 +163,7 @@ never reach a third-party messaging service.
 <details open>
 <summary><b>WhatsApp campaigns</b></summary>
 
-- Send **text, image or video** through a **self-hosted gateway** you control
+- Send **text, image or video** from **your own number**, linked by QR like WhatsApp Web
 - **Ten templates**: announce one product, reorder their product, new in a category they buy, win
   back a lapsed customer, nudge a one-time buyer, thank a VIP, ask for a review,
   coupon + their product, coupon only, plain announcement
@@ -182,7 +183,7 @@ never reach a third-party messaging service.
   job; customers join as they qualify and leave the moment they order
 - **Flow test mode** — point a whole sequence at one number so it can never
   reach a customer
-- **Gateway plugins**, including an inbound numbered menu bot that answers when
+- **A built-in inbound menu bot** that answers when
   nobody is at a desk
 - **Menu builder** at `/menu` — trigger word, greeting and a drag-and-drop option
   tree, with every move also on a button so it works without a mouse
@@ -190,7 +191,7 @@ never reach a third-party messaging service.
   catalogue, and proposes rather than performs
 - **Per-page summaries** in plain English, on request
 - **Paced sending** with jitter, as a resumable job with live progress
-- **Automatic recovery** when the gateway restarts mid-broadcast
+- **Automatic recovery** when the WhatsApp engine restarts mid-broadcast
 - Link a number by scanning a **QR inside Settings**
 
 </details>
@@ -307,13 +308,14 @@ never reach a third-party messaging service.
 - HMAC-signed, self-contained state token binds the browser redirect to the
   server-to-server callback, so the two legs may land on different instances
 - Credentials verified against the store before being persisted
-- Pluggable durable storage — filesystem self-hosted, Redis on serverless
+- Everything durable lives in PostgreSQL — one container, one volume
 - Preflight rejects non-HTTPS and non-routable callbacks **before** you approve
-- Optional password login, HMAC-SHA256 cookies verified in middleware
+- Email + password accounts (scrypt hashes), HMAC-SHA256 session cookies verified in Proxy
+- Rate-limited sign-in and one-time, hashed password-reset links
 - One-click disconnect wipes the key and every cached order
 - **Customer phone numbers never reach the browser** — the payload carries only
   whether someone is reachable
-- The gateway key is stored the same way and shown only masked
+- The WhatsApp engine key never leaves the server; the engine is unreachable from outside Docker
 
 </details>
 
@@ -376,7 +378,7 @@ discount
 **WhatsApp** — text, image and video · nine templates · eleven personalisation
 variables · per-customer product photos · catalogue product picker · coupon
 creation and attachment · dry run · test send · typed confirmation · opt-out list
-· paced sending with jitter · resumable jobs · automatic gateway recovery · live
+· paced sending with jitter · resumable jobs · automatic reconnect after restarts · live
 progress and stop control
 
 **Inbox** — conversations matched to customers · order count and lifetime spend
@@ -542,15 +544,13 @@ graph TB
         WC --- DB
     end
 
-    subgraph vps["Always-on server (VPS)"]
-        OWA["OpenWA gateway<br/>NestJS"]
-        ENGINE["Engine<br/>whatsapp-web.js / baileys"]
-        AUTH[("Session credentials<br/>./data")]
-        OWA --- ENGINE
-        ENGINE --- AUTH
+    subgraph vps["WhatsApp service (Docker)"]
+        OWA["WhatsApp engine<br/>Baileys, one session per account"]
+        AUTH[("Pairings<br/>wa-data volume")]
+        OWA --- AUTH
     end
 
-    subgraph pulse["PulseCommerce (Vercel or Node)"]
+    subgraph app["Setups Works Growth (Docker)"]
         ROUTES["API routes"]
         LIB["lib/ — woo · analytics<br/>whatsapp · export · auth"]
         SSR["React pages"]
@@ -558,9 +558,9 @@ graph TB
         LIB --- SSR
     end
 
-    KV[("Redis or disk<br/>snapshot chunks · store config<br/>gateway config · broadcast jobs<br/>flow state · opt-outs")]
+    KV[("PostgreSQL container<br/>accounts · store mirror<br/>WhatsApp settings · broadcast jobs<br/>flow state · opt-outs")]
 
-    CRON["Supabase pg_cron<br/>10min sync · daily flows · 5min recovery"]
+    CRON["cron container<br/>10min sync · daily flows · 5min recovery"]
     GROQ(["Groq<br/>counts and names only"])
     BROWSER["Browser"]
     WA(["WhatsApp"])
@@ -572,8 +572,8 @@ graph TB
     ROUTES -->|"X-API-Key over HTTPS"| OWA
     ROUTES -->|"tool results:<br/>no phones, no emails"| GROQ
     CRON -->|"bearer CRON_SECRET"| ROUTES
-    ENGINE <-->|"persistent socket"| WA
-    OWA -->|"plugins answer inbound"| WA
+    OWA <-->|"linked-device socket"| WA
+    OWA -->|"menu bot answers inbound"| WA
     WA --> CUST
     SSR --> BROWSER
     BROWSER -->|"filters, never numbers"| ROUTES
@@ -581,8 +581,8 @@ graph TB
 
 Two properties hold by construction rather than by care:
 
-- **The app never speaks to WhatsApp.** It speaks to your gateway, which holds
-  the socket. Move the gateway and nothing here changes but a URL.
+- **The web app never speaks to WhatsApp.** It speaks to the WhatsApp engine
+  over the private Docker network; the engine holds each account's socket.
 - **The browser never receives a phone number.** The analytics payload carries a
   `hasPhone` boolean. Numbers are resolved server-side at send time.
 - **The model never receives one either.** Its tools return counts, names and
@@ -650,7 +650,7 @@ src/
 │   │   ├── orders/           Register, payments, coupons
 │   │   ├── forecast/         Trend + seasonality projection
 │   │   ├── reports/          Report builder and written report
-│   │   └── settings/         Stores, WhatsApp gateway, data window
+│   │   └── settings/         Stores, WhatsApp, data window
 │   └── api/
 │       ├── analytics/        Computes the full payload
 │       ├── customers/[key]/  One customer with order history, on demand
@@ -658,7 +658,7 @@ src/
 │       ├── reports/          Export generation
 │       ├── settings/         Connection state, switching, data window
 │       └── whatsapp/
-│           ├── settings/     Gateway connection, verified before saving
+│           ├── settings/     WhatsApp link state and preferences
 │           ├── session/      Session state and pairing QR
 │           ├── preview/      Dry run — resolves recipients, sends nothing
 │           ├── test/         One message to a typed number
@@ -672,7 +672,7 @@ src/
 │   ├── store/                Config, KV abstraction, snapshot cache
 │   ├── analytics/            Pure engine: KPIs, customers, cohorts, acquisition,
 │   │                         products, inventory, operations, forecast
-│   ├── whatsapp/             Gateway client, phone normalisation, templates,
+│   ├── whatsapp/             Engine client, phone normalisation, templates,
 │   │                         recipient resolution, broadcast jobs, opt-outs
 │   ├── export/               CSV, Excel and PDF builders, embedded fonts
 │   └── auth/                 Signed sessions, signed authorization state
@@ -680,7 +680,7 @@ src/
 │   ├── charts/               Chart primitives on a CVD-validated palette
 │   ├── dashboard/            Stat strip, data table, filters, page states
 │   ├── layout/               Sidebar, topbar, store switcher, command palette
-│   ├── whatsapp/             Gateway settings, QR, send panel, product picker
+│   ├── whatsapp/             WhatsApp settings, QR, send panel, product picker
 │   └── ui/                   shadcn/ui
 └── middleware.ts             Session gate
 ```
@@ -698,7 +698,7 @@ generated coupons; every other feature is unaffected.
 
 ## Data pipeline
 
-One pull, cached three ways, then everything derived from it.
+One sync into PostgreSQL, a short in-memory memo, then everything derived from it.
 
 ```mermaid
 flowchart TD
@@ -706,14 +706,10 @@ flowchart TD
     B -->|"retry with backoff<br/>on 0, 408, 429, 5xx"| B
     B --> C["slim()<br/>drop tax arrays, meta_data,<br/>image galleries — 81% smaller"]
     C --> D["decodeEntities()<br/>+ attachAttribution()"]
-    D --> E["Snapshot<br/>orders · customers · products"]
-    E --> F["gzip + 300KB chunks<br/>behind a manifest"]
-    F --> G[("Shared cache<br/>Redis")]
-    E --> H[("Disk / tmp<br/>60 min")]
+    D --> G[("PostgreSQL mirror<br/>woo_orders · woo_customers · woo_products")]
+    G --> E["Snapshot<br/>orders · customers · products"]
     E --> I[("Memory<br/>10 min")]
-    G --> J["computeAnalytics()<br/>pure, per request"]
-    H --> J
-    I --> J
+    I --> J["computeAnalytics()<br/>pure, per request"]
     J --> K["Range + granularity"]
     K --> L["Payload<br/>hasPhone, never the number"]
 ```
@@ -726,11 +722,7 @@ flowchart LR
     M -->|yes| OUT["Serve"]
     M -->|no| INF{"Already<br/>in flight?"}
     INF -->|yes| JOIN["Await it"] --> OUT
-    INF -->|no| D{"Disk<br/>fresh?"}
-    D -->|yes| WARM1["Warm memory"] --> OUT
-    D -->|no| S{"Shared<br/>fresh?"}
-    S -->|yes| WARM2["Warm memory + disk"] --> OUT
-    S -->|no| PULL["Pull from WooCommerce"] --> WRITE["Write all three"] --> OUT
+    INF -->|no| PG["Read the PostgreSQL mirror"] --> WARM["Warm memory"] --> OUT
 ```
 
 **Why a snapshot.** Every metric — RFM, cohorts, affinity, forecast — needs the
@@ -740,14 +732,8 @@ a filter change costs milliseconds instead of a re-pull.
 **Why in-flight collapsing.** A single page load fires several requests. Without
 it, a cold start would begin several identical multi-minute pulls at once.
 
-**Cache key.** Hashed from the schema version, store URL and data window.
-Deliberately *not* the consumer key: WooCommerce issues a fresh one on every
-re-authorization, and keying on it once orphaned every cached copy at a stroke
-and forced a full re-pull that outlived a serverless request.
-
-**Chunks before manifest.** The shared cache writes its chunks first and the
-manifest last, so a reader can never find a manifest pointing at chunks that do
-not exist yet.
+**Where freshness comes from.** The `cron` container syncs every connected store
+every 10 minutes, and a sync drops the in-memory memo the moment new data lands.
 
 ---
 
@@ -758,9 +744,9 @@ A broadcast is a resumable job, not a long request.
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant P as PulseCommerce
+    participant P as Setups Works Growth
     participant K as Storage
-    participant W as Gateway
+    participant W as WhatsApp engine
     participant C as Customers
 
     B->>P: filter + message (never numbers)
@@ -789,17 +775,17 @@ stateDiagram-v2
     sending --> sending: tick hands over a batch
     sending --> completed: cursor reaches the end
     sending --> cancelled: stopped by the operator
-    sending --> failed: gateway unrecoverable
+    sending --> failed: engine unrecoverable
     cancelled --> [*]
     completed --> [*]
     failed --> [*]
     note right of cancelled
         Batches already accepted
-        by the gateway still go out.
+        by the WhatsApp engine still go out.
     end note
 ```
 
-### Gateway session states
+### WhatsApp session states
 
 ```mermaid
 stateDiagram-v2
@@ -808,7 +794,7 @@ stateDiagram-v2
     initializing --> qr_ready: no stored pairing
     qr_ready --> ready: QR scanned
     initializing --> ready: pairing restored from disk
-    ready --> stale: gateway process restarts
+    ready --> stale: engine process restarts
     stale --> ready: engine restarted automatically
     ready --> disconnected: stopped or logged out
     disconnected --> ready: start, pairing still on disk
@@ -819,8 +805,8 @@ stateDiagram-v2
     end note
 ```
 
-**Why ticks.** The gateway paces its own batches — a hundred recipients at four
-seconds apart occupies it for roughly seven minutes — which no serverless
+**Why ticks.** The WhatsApp engine paces its own batches — a hundred recipients at four
+seconds apart occupies it for roughly seven minutes — which no HTTP
 request can wait out. Each tick hands over at most one batch and returns, so
 closing the page pauses the job rather than breaking it, and whatever was
 already handed over still goes out.
@@ -831,7 +817,7 @@ address someone who is not a customer of the connected store, and the opt-out
 list cannot be routed around by the UI.
 
 **Why both readiness signals are checked.** `status` is a persisted database
-value and `engineLoaded` is the live one. After a gateway restart the row still
+value and `engineLoaded` is the live one. After an engine restart the row still
 says `ready` while the engine is gone, and a send in that state fails for every
 recipient. Both must agree before anything is dispatched.
 
@@ -839,15 +825,15 @@ recipient. Both must agree before anything is dispatched.
 ## Flow pipeline
 
 A broadcast is one message now. A flow waits days between steps, which no
-serverless request can sit through — so the waiting lives in storage and a
+HTTP request can sit through — so the waiting lives in storage and a
 scheduled job advances it.
 
 ```mermaid
 sequenceDiagram
-    participant V as Supabase pg_cron
-    participant P as PulseCommerce
+    participant V as cron container
+    participant P as Setups Works Growth
     participant K as Storage
-    participant W as Gateway
+    participant W as WhatsApp engine
 
     Note over V: once a day
     V->>P: POST /api/cron/flows (bearer CRON_SECRET)
@@ -893,10 +879,10 @@ The loop is the safety model. Reads run; actions stop and wait for a person.
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant P as PulseCommerce
+    participant P as Setups Works Growth
     participant G as Groq
     participant K as Snapshot
-    participant W as Gateway
+    participant W as WhatsApp engine
 
     B->>P: question
     P->>P: pick the tools this question could need (max 8)
@@ -954,9 +940,9 @@ customer, and it does not run in this application at all.
 sequenceDiagram
     participant C as Customer
     participant W as WhatsApp
-    participant G as Gateway
-    participant PL as chat-flow plugin
-    participant S as Plugin storage
+    participant G as WhatsApp engine
+    participant PL as menu bot
+    participant S as Menu state
 
     C->>W: "hi"
     W->>G: inbound message
@@ -976,8 +962,8 @@ sequenceDiagram
     Note over S: state expires after 15 minutes
 ```
 
-**It runs on the gateway, not here**, which is why it answers at three in the
-morning whether or not this application is running.
+**It runs in the WhatsApp engine**, which is why it answers at three in the
+morning whether or not anyone has the app open.
 
 **The trigger is matched exactly** — `input.toLowerCase() === trigger` — so `hi`
 opens the menu while `this` and `hi there` do not. Left empty it matches *any*
@@ -991,20 +977,30 @@ read as a menu choice.
 
 ## Quick start
 
+Everything runs in Docker: the app, PostgreSQL, and a tiny scheduler.
+
 ```bash
-git clone https://github.com/nitheeshdr/PulseCommerce.git
-cd PulseCommerce
-npm install
-cp .env.example .env.local
-npm run dev
+git clone <your-repo-url> growth
+cd growth
+cp .env.example .env
+# set POSTGRES_PASSWORD, AUTH_SECRET, CRON_SECRET and WHATSAPP_ENGINE_KEY
+# (each: openssl rand -hex 32)
+docker compose up -d --build
 ```
 
-Open <http://localhost:3000>. The app runs immediately, but every page shows
-**"Connect your WooCommerce store"** until one is authorized.
+Open <http://localhost:3000>, create an account, and connect a store. Database
+migrations run automatically when the app container starts.
 
-**Requirements:** Node 20+ (developed on 22) and a WooCommerce store with the
-REST API enabled. WordPress permalinks must not be "Plain", or the REST API
-returns 404.
+| Service | What it is | Size |
+|---|---|---|
+| `app` | Next.js standalone server (Node 22 Alpine) | ~350 MB image |
+| `db` | PostgreSQL 17 Alpine, data in the `db-data` volume | — |
+| `whatsapp` | WhatsApp engine — linked-device sessions, menu bot | ~150 MB image |
+| `cron` | BusyBox `crond` calling `/api/cron/*` | ~14 MB image |
+| `caddy` | optional, automatic HTTPS (`--profile https`) | — |
+
+**Requirements:** Docker with Compose v2, and a WooCommerce store with the REST
+API enabled. WordPress permalinks must not be "Plain", or the REST API returns 404.
 
 ---
 
@@ -1021,7 +1017,7 @@ form is exactly the failure mode that endpoint exists to remove.
 ```mermaid
 sequenceDiagram
     participant B as Your browser
-    participant A as PulseCommerce
+    participant A as Setups Works Growth
     participant W as Your store
 
     B->>A: Settings, authorize, enter store URL
@@ -1050,54 +1046,48 @@ approving an app that could not have received the result.
 ### Local development
 
 ```bash
-npm run dev:https                                   # https://localhost:3000
-cloudflared tunnel --url https://localhost:3000     # or: ngrok http https://localhost:3000
+docker compose up -d db                 # just the database
+npm install
+DATABASE_URL=postgres://growth:<POSTGRES_PASSWORD>@localhost:5432/growth npm run db:migrate
+npm run dev
 ```
 
-Put the public address into `.env.local` as `APP_URL` and restart.
-
-`APP_URL` is auto-detected on Vercel from `VERCEL_PROJECT_PRODUCTION_URL`.
+(Uncomment the `ports` line under `db` in `docker-compose.yml` to reach it from
+the host.) To connect a real store locally, expose the app over HTTPS with a
+tunnel — `cloudflared tunnel --url http://localhost:3000` or
+`ngrok http 3000` — and set `APP_URL` to the tunnel address.
 
 ---
 
 ## WhatsApp campaigns
 
-Broadcasts go through a **self-hosted [OpenWA](https://github.com/rmyndharis/OpenWA)
-gateway** that you run. PulseCommerce is only a client of its REST API.
+WhatsApp is **built in**. Each account links its own number as a **linked
+device** — exactly like WhatsApp Web — by scanning a QR code in the product.
+There is no gateway to deploy and no API key to paste.
 
-### What you need
+Under the hood the `whatsapp` service ([`whatsapp/`](whatsapp)) holds one
+session per account over the WhatsApp Web multi-device protocol
+([Baileys](https://github.com/WhiskeySockets/Baileys)). It is only reachable on
+the private Docker network, authenticated with `WHATSAPP_ENGINE_KEY`, and
+pairings live in the `wa-data` volume, so restarts and redeploys reconnect the
+same number without a new scan.
 
-A host that can keep a process running continuously:
+### Linking a number
 
-| | Works | Why |
-|---|:---:|---|
-| VPS or cloud server | **Yes** | Docker, persistent volumes, a process that stays up |
-| Shared hosting | No | Processes are recycled and the auth directory does not survive |
-| Vercel / serverless | No | No long-lived process at all |
+1. Open **Settings → WhatsApp** and click **Link a number**.
+2. On the phone: **WhatsApp → Settings → Linked devices → Link a device**.
+3. Scan the QR. It refreshes by itself; the card switches to **Linked** within
+   a few seconds of the scan.
+4. Confirm the default country code and the pace between messages.
 
-A WhatsApp session is a live connection. If the process dies and its data
-directory is wiped, the number unlinks and a broadcast that runs for hours never
-finishes.
+**Unlink number** logs the device out of WhatsApp (it disappears from the
+phone's Linked devices list) and deletes the session's local data. Unlinking
+from the phone works too — the app notices and asks for a new scan.
 
-### Setting it up
-
-1. Deploy OpenWA behind HTTPS on your server (Docker Compose is its supported path).
-2. Create a session and link a **dedicated number** — see the warning below.
-3. Create an API key with the **operator** role. Sending is all this needs.
-4. In **Settings → WhatsApp gateway**, enter the URL and key, and confirm the
-   country code.
-
-Or set it on the host instead, which survives a redeploy and a cleared store:
-
-```bash
-WHATSAPP_API_URL=https://wa.yourdomain.com
-WHATSAPP_API_KEY=...            # operator role
-WHATSAPP_DIAL_CODE=91           # assumed when a number has no country code
-WHATSAPP_SESSION_ID=...         # optional; the only session is adopted if omitted
-```
-
-If no number is linked, Settings shows the pairing **QR inline**. It is proxied
-through this app, so the gateway key never reaches a browser page.
+> **Use a dedicated number.** Linked-device automation is not Meta's official
+> Business API. Sending marketing at volume from a linked device can get a
+> number restricted — keep the pace conservative and only message customers
+> who expect to hear from you.
 
 ### Sending
 
@@ -1195,11 +1185,11 @@ removed and the sentence tidied afterwards — `[^\S\n]{2,}` to a single space,
 
 | | |
 |---|---|
-| Spacing | ~4s between messages, plus the gateway's own 0–2s jitter |
-| Batch size | 100 recipients per submission (the gateway's maximum) |
+| Spacing | ~4s between messages, plus the engine's own 0–2s jitter |
+| Batch size | 100 recipients per submission (the engine's maximum) |
 | Duration | A full base runs for hours, deliberately |
 | Interruption | Closing the page pauses; reopening resumes from the cursor |
-| Gateway restart | Detected and recovered automatically, costing one batch of delay |
+| Engine restart | Detected and recovered automatically, costing one batch of delay |
 
 Every excluded recipient is counted and categorised — no phone on file, an
 unreadable number, a duplicate shared with another record, or an opt-out — so
@@ -1231,10 +1221,9 @@ messaged once. Numbers never reach the browser.
 
 ### Buttons, product cards and link previews
 
-A self-hosted gateway cannot send tappable **buttons** or **product cards**.
+A linked device cannot send tappable **buttons** or **product cards**.
 Those need pre-approved templates on Meta's Cloud API; WhatsApp withdrew them
-from unofficial clients. OpenWA marks its catalog endpoints "not supported by
-any engine", and a live gateway answers `501`.
+from unofficial clients.
 
 The closest thing is WhatsApp's **link preview**, a tappable card built from the
 page itself. Two things affect it:
@@ -1242,8 +1231,8 @@ page itself. Two things affect it:
 - **Do not attach a photo** — media suppresses the preview.
 - **Your product pages need `og:image`** — most WordPress SEO plugins add it.
 
-> **Use a dedicated number.** OpenWA connects through reverse-engineered clients
-> rather than Meta's official API, so there is a real risk of restriction and no
+> **Use a dedicated number.** The linked-device protocol is not
+> Meta's official Business API, so there is a real risk of restriction and no
 > appeal path. Do not link the number your business runs on. Messaging your own
 > past customers is the safest workload; cold-blasting strangers is what gets
 > numbers banned.
@@ -1293,28 +1282,20 @@ unintended.
 
 ### Scheduling
 
-The tick does **not** run on Vercel Cron — this project has none configured.
-It runs on **Supabase pg_cron + pg_net**: a `trigger_app_job(path)` SQL
-function (`supabase/migrations/20260811170000_cron.sql`) reads the app's base
-URL and `CRON_SECRET` from Supabase Vault and POSTs to this app directly from
-the database, on a schedule that lives in `cron.job` rather than in
-`vercel.json`. Advancing flows is scheduled once daily, at 04:30 UTC — the
-same reasoning as before still holds: `waitDays` is the real granularity a
-flow gets, since a step still only goes out on the first run after it comes
-due.
+All scheduled work runs in the **`cron` service** — a BusyBox `crond` container
+that POSTs to the app over the private Docker network with `CRON_SECRET` as a
+bearer token. The schedule lives in [`docker/cron/crontab`](docker/cron/crontab):
 
-The same mechanism runs two other schedules: syncing every connected store
-every 10 minutes (`/api/cron/sync`), and abandoned-checkout recovery every 5
-minutes (`/api/cron/abandoned-checkouts`, see
-[Abandoned checkout recovery](#abandoned-checkout-recovery)) for stores that
-turned it on. All three share the same `trigger_app_job` helper and the same
-`CRON_SECRET` bearer check on the app side — inspect or change any of them
-with `select * from cron.job;` against the Supabase database, not by editing
-`vercel.json`.
+| Job | Schedule (UTC) | Route |
+|---|---|---|
+| Sync every connected store | every 10 minutes | `/api/cron/sync` |
+| Advance flows | daily at 04:30 | `/api/cron/flows` |
+| Abandoned-checkout recovery | every 5 minutes | `/api/cron/abandoned-checkouts` |
 
-`CRON_SECRET` must be set in both the app's environment and Supabase Vault
-(as the `cron_secret` secret) for these to authenticate. Unset on either side,
-the route returns 503 and nothing advances.
+Advancing flows daily means `waitDays` is the real granularity a flow gets: a
+step goes out on the first run after it comes due. Change a schedule by
+editing the crontab and running `docker compose up -d --build cron`. With
+`CRON_SECRET` unset the routes return 503 and nothing advances.
 
 ---
 
@@ -1341,19 +1322,13 @@ skip, not a send, recorded in the same ledger.
 
 ---
 
-## Gateway plugins and the menu bot
+## The menu bot
 
-A self-hosted OpenWA gateway takes installable extensions, which run inside the
-gateway rather than in this application. They are relevant here because one of
-them closes the gap this app cannot: **answering an inbound message.**
+The WhatsApp engine answers inbound messages itself — around the clock, whether
+or not anyone has the app open. Configure it under **Auto-reply**; it runs on the
+account's linked number.
 
-Everything in PulseCommerce is outbound. Flows and broadcasts send; the inbox
-lets a person reply. Nothing replies automatically, because nothing here is
-running when a customer messages at 3am.
-
-### The menu bot
-
-`chat-flow` answers immediately with a numbered menu:
+### How it answers
 
 ```
 customer sends "hi"
@@ -1364,52 +1339,22 @@ customer sends "hi"
   3  Feedback     ->  invitation to just type it
 ```
 
-Menus nest to any depth. State is per conversation and expires after 15 minutes,
-so a stray `1` the next day is never read as a menu choice.
+Menus nest up to three deep. Position is per conversation and expires after 15
+minutes, so a stray `1` the next day is never read as a menu choice. Anything
+that is neither the trigger nor a menu choice is left alone for a person to
+answer in the inbox.
 
-**Set a trigger word.** The match is exact —
-`input.toLowerCase() === trigger.toLowerCase()` — so `hi` opens the menu while
-`this` and `hi there` are ignored. Left empty, the trigger matches *any* text
-message, which on a real business line means every customer gets a menu instead
-of a person.
+**Set a trigger word.** The match is exact and case-insensitive, so `hi` opens
+the menu while `this` and `hi there` are ignored. Left empty, the trigger
+matches *any* text message, which on a real business line means every customer
+gets a menu instead of a person.
 
-### What else is available
+### What linked devices cannot do
 
-| Plugin | What it does |
-|---|---|
-| `chat-flow` | Numbered menu bot, stateful per conversation |
-| `after-hours` | Away message outside configured business hours |
-| `faq-bot` | Keyword-matched auto-replies |
-| `http-action` | Calls an HTTP endpoint on an inbound message |
-| `voice-transcription` | Transcribes voice notes (beta; needs a paid API) |
-| `group-translate` | Translates group messages |
-| `gsheets-logger` | Logs messages to Google Sheets |
-| `chatwoot-adapter` | Bridges to a Chatwoot helpdesk |
-| `typebot-connector` | Bridges to Typebot |
-| `supabase-otp-hook` | Sends Supabase auth OTPs (beta) |
-
-Install from the gateway's catalogue, which indexes the plugin repository:
-
-```bash
-curl -X POST "$GATEWAY/api/plugins/install-url" \
-  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
-  -d '{"url":"https://github.com/.../chat-flow.zip"}'
-```
-
-**Installed is not enabled.** A plugin lands inert and only runs once enabled —
-which matters, because four of these reply to customers automatically. Configure
-before enabling:
-
-```bash
-curl -X PUT  "$GATEWAY/api/plugins/chat-flow/config" ... # menu tree
-curl -X POST "$GATEWAY/api/plugins/chat-flow/enable" ... # now live
-```
-
-### What the gateway cannot do
-
-No buttons and no product cards — OpenWA drives a reverse-engineered client, not
-Meta's Business API, and those are Business API features. A menu is numbers typed
-as text, and a flow branches on free text rather than tapped replies.
+No tappable buttons and no product cards — those are Meta Business API
+features. A menu is numbers typed as text, and a flow branches on free text
+rather than tapped replies. For official delivery, see the WhatsApp Cloud API
+pilot.
 
 ---
 
@@ -1434,7 +1379,7 @@ you ask ──► model ──► read tool  ──► executed at once, result 
 ```
 
 **It reads freely.** KPIs, segments, top customers, products, stock risk,
-audience sizes, flows, the menu bot, gateway status — all through the same
+audience sizes, flows, the menu bot, WhatsApp status — all through the same
 functions the screens use, so it cannot quote a figure the dashboard disagrees
 with.
 
@@ -1519,40 +1464,49 @@ pointer change — the next request reads a different cache rather than re-pulli
 
 ---
 
-## Optional password protection
+## Accounts and sign-in
 
-```bash
-AUTH_SECRET=$(openssl rand -hex 32)   # signs the session cookie
-APP_PASSWORD=something-long
-```
+Accounts are email + password, stored in the app's own `users` table:
 
-With both set, every route redirects to `/login`. Sessions are HMAC-SHA256
-cookies verified in middleware via Web Crypto, so the same code runs on Edge and
-Node. Completing the WooCommerce authorization also establishes a session —
-proving you can approve the store is proof of access.
+- Passwords are hashed with **scrypt** (Node's standard library — no native
+  dependency). Minimum 8 characters.
+- A session is an **HMAC-SHA256-signed cookie** (`AUTH_SECRET`), verified in
+  `src/proxy.ts` on every request without a database round trip. 30-day lifetime.
+- Sign-in, sign-up and password reset are **rate limited** per IP and per email.
+- **Forgot password** emails a one-time link valid for an hour; only a SHA-256
+  digest of the token is stored. Without `SMTP_*` configured, the link is
+  written to the app log instead (`docker compose logs app | grep reset-password`).
+- Set `DISABLE_SIGNUPS=true` to close registration on a private deployment.
+- API keys (`sw_live_…`, Settings → API keys) authenticate scripts against the
+  same REST API with read/write scopes.
 
 ---
 
 ## Environment variables
 
+All configuration lives in `.env` (copy [`.env.example`](.env.example)).
+
 | Variable | Required | Purpose |
 |---|:---:|---|
-| `APP_URL` | to connect | Public HTTPS address WooCommerce delivers credentials to. Auto-detected on Vercel. |
-| `AUTH_SECRET` | **to connect** | Signs the authorization state token and session cookie. |
-| `APP_PASSWORD` | for login | Set alongside `AUTH_SECRET` to require a password. |
-| `KV_REST_API_URL` | on serverless | Redis endpoint. Vercel KV and Upstash both provide it. |
-| `KV_REST_API_TOKEN` | on serverless | Token for the above. `UPSTASH_REDIS_REST_*` also accepted. |
-| `SNAPSHOT_CACHE_MINUTES` | no | How long a snapshot stays warm. Default `10`. |
-| `WHATSAPP_API_URL` | no | Gateway base URL. Takes the connection out of the UI. |
-| `WHATSAPP_API_KEY` | no | Gateway API key, operator role. |
-| `WHATSAPP_SESSION_ID` | no | Which session to send from. Adopted automatically if omitted. |
-| `WHATSAPP_DIAL_CODE` | no | Country code for numbers stored without one, e.g. `91`. |
-| `WHATSAPP_SEND_DELAY_MS` | no | Pause between messages. Default `4000`; gateway floor `1000`. |
-| `CRON_SECRET` | for flows | Authorises the scheduled flow tick. Unset closes the route rather than opening it. |
+| `POSTGRES_PASSWORD` | **yes** | Password for the bundled PostgreSQL container. |
+| `AUTH_SECRET` | **yes** | Signs session cookies and the WooCommerce state token. |
+| `CRON_SECRET` | **yes** | Authenticates the `cron` container to `/api/cron/*`. |
+| `APP_URL` | to connect | Public HTTPS address WooCommerce delivers credentials to. |
+| `DOMAIN` | for HTTPS | Domain for the optional Caddy service (`--profile https`). |
+| `DATABASE_URL` | no | Set only to use an external database (assembled by compose otherwise). |
+| `DISABLE_SIGNUPS` | no | `true` closes registration. |
+| `SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_FROM` | no | Outgoing email for password resets. |
+| `SNAPSHOT_CACHE_MINUTES` | no | How long a snapshot stays warm in memory. Default `10`. |
+| `WHATSAPP_ENGINE_KEY` | **yes** | Shared secret between the app and the built-in WhatsApp engine. |
+| `WHATSAPP_DIAL_CODE` | no | Default country code for new accounts, e.g. `91`. |
+| `WHATSAPP_SEND_DELAY_MS` | no | Default pause between messages. Default `4000`; floor `1000`. |
+| `RAZORPAY_*` | no | Paid plans (UPI Autopay subscriptions). Unset = billing off: every account gets every feature, unlimited. |
 | `GROQ_API_KEY` | for the assistant | Enables `/assistant`. Unset returns 503 and the screen says so. |
 
-WooCommerce credentials are **never** environment variables — they arrive only
-through the authorization flow.
+`NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_RAZORPAY_KEY_ID` are baked into the
+browser bundle at build time — rebuild (`docker compose up -d --build`) after
+changing them. WooCommerce credentials are **never** environment variables —
+they arrive only through the authorization flow.
 
 ---
 
@@ -1651,28 +1605,43 @@ rather than flipped.
 
 ## Deployment
 
-```bash
-npm run build
-npm run start
-```
+The same `docker compose` stack runs anywhere Docker does.
 
-Set `APP_URL`, plus `AUTH_SECRET` and `APP_PASSWORD` to gate the dashboard.
+### Azure (student account)
 
-### Serverless
+The simplest fit for Azure for Students is a single **Linux VM** (a B1s or
+B2s is enough) running the whole stack:
 
-Read-only filesystem, so provision Redis:
+1. Create an Ubuntu VM. In its network security group, allow inbound **22**,
+   **80** and **443**.
+2. Point a domain's DNS **A record** at the VM's public IP. (No domain? Azure
+   gives the VM a free `<name>.<region>.cloudapp.azure.com` DNS label under
+   *Public IP → Configuration*.)
+3. On the VM:
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   git clone <your-repo-url> growth && cd growth
+   cp .env.example .env
+   # fill in POSTGRES_PASSWORD, AUTH_SECRET, CRON_SECRET, WHATSAPP_ENGINE_KEY,
+   # DOMAIN=your.domain and APP_URL=https://your.domain
+   sudo docker compose --profile https up -d --build
+   ```
+4. Caddy obtains a Let's Encrypt certificate automatically. Open
+   `https://your.domain`, sign up, and connect your store.
 
-```bash
-KV_REST_API_URL=https://your-store.upstash.io
-KV_REST_API_TOKEN=...
-AUTH_SECRET=...
-```
+Updating: `git pull && sudo docker compose --profile https up -d --build`.
+Backing up: `sudo docker compose exec db pg_dump -U growth growth > backup.sql`.
 
-Without it the app still runs and says the deployment cannot save a connection
-rather than failing mid-flow. The snapshot cache is shared through the same
-Redis, so cold starts read it rather than re-pulling.
+**Managed alternatives.** The app image also runs on Azure Container Apps or
+App Service for Containers, with Azure Database for PostgreSQL
+(`DATABASE_URL=...?sslmode=require`). The scheduler then needs a replacement —
+e.g. a Container Apps *scheduled job* that runs the same `wget` calls as
+[`docker/cron/crontab`](docker/cron/crontab). Run one app replica, or accept
+that the in-memory rate limiter and snapshot memo are per replica.
 
-**The WhatsApp gateway cannot live here.** It needs a process that stays up.
+**WhatsApp** runs in the `whatsapp` container, which needs to stay up — on
+the VM setup it does. On Container Apps, give it its own always-on app with a
+persistent volume for `/data` and set `WHATSAPP_ENGINE_URL` on the web app.
 
 ---
 
@@ -1681,8 +1650,11 @@ Redis, so cold starts read it rather than re-pulling.
 **"Your store cannot reach this app"** — `APP_URL` points at localhost or a
 private address. The callback is a server-to-server POST. Use a tunnel.
 
-**"This deployment cannot save a connection"** — serverless with no Redis. Set
-`KV_REST_API_URL` and `KV_REST_API_TOKEN`, then redeploy.
+**"This deployment cannot save a connection"** — `DATABASE_URL` is missing or
+the database is unreachable. Check `docker compose ps` and `docker compose logs db`.
+
+**Didn't receive a password-reset email** — SMTP isn't configured; the link is in
+`docker compose logs app`.
 
 **"AUTH_SECRET is not set"** — generate one with `openssl rand -hex 32`.
 
@@ -1694,11 +1666,11 @@ and nothing (WAF, firewall, basic auth) blocks the POST.
 **"The store key is read-only"** on coupon creation — the key predates the scope
 change. Reconnect the store in Settings to re-approve it.
 
-**WhatsApp session keeps dropping / shows `qr_ready`** — the host cannot keep a
-process alive or is not persisting the gateway's data directory. Move it to a VPS.
+**WhatsApp keeps asking for a new QR** — the `wa-data` volume is not being
+persisted, or the device was unlinked from the phone. Check `docker compose logs whatsapp`.
 
 **"The session cannot send right now"** — status and engine disagree, which
-happens after a gateway restart. The app restarts the engine automatically; if it
+happens after an engine restart. The app restarts the engine automatically; if it
 persists, the pairing itself is gone and the QR needs re-scanning.
 
 **Everyone dropped as "unreadable"** — the default country code is empty or wrong.
@@ -1712,39 +1684,32 @@ persists, the pairing itself is gone and the QR needs re-scanning.
 ## Scripts
 
 ```bash
-npm run dev          # http://localhost:3000
-npm run dev:https    # https://localhost:3000, needed for the authorize flow
-npm run build        # production build
-npm run start        # serve the production build
-npm run lint         # eslint
-npm run typecheck    # tsc --noEmit
-npm test             # Playwright end-to-end suite
-npm run test:ui      # the same suite, interactively
+docker compose up -d --build   # build and start the whole stack
+docker compose logs -f app     # follow app logs
+npm run dev                    # development server (needs DATABASE_URL)
+npm run db:migrate             # apply db/migrations/*.sql
+npm run build                  # production build
+npm run lint                   # eslint
+npm run typecheck              # tsc --noEmit
+npm test                       # Playwright end-to-end suite
 ```
+
+### Database migrations
+
+The schema lives in [`db/migrations`](db/migrations), applied in filename order
+by [`scripts/migrate.mjs`](scripts/migrate.mjs) — automatically on every app
+container start, each file once, inside a transaction, under an advisory lock.
+To change the schema, add the next numbered file (e.g. `0002_add_x.sql`); never
+edit one that has been applied.
 
 ### Tests
 
 The suite runs against a production build with **no store connected and no
-gateway configured** — the state a fresh clone is in, and the one most likely to
-break unnoticed. Nothing touches a real store or sends a message; the config
-blanks any Redis credentials from `.env.local` so a developer's own store cannot
-be reached from a test run.
-
-What it asserts:
-
-- Every endpoint **refuses** work it cannot do, rather than half-attempting it —
-  a missing store is a `409`, not a crash or an empty dashboard
-- A broadcast without a confirmation count is rejected
-- An image message with no media and no product is rejected
-- The audience schema exposes no way to pass phone numbers directly
-- Every route in `src/app/api` appears in the OpenAPI document
-- **Every mermaid diagram in this README parses**, in a real browser with the
-  library GitHub renders with
-
-That last one exists because a diagram here once shipped broken: a label
-contained a semicolon, mermaid read it as the end of a statement, and nothing
-failed — the markdown was valid, the app built, lint passed, and GitHub printed
-a parse error where the diagram should have been.
+WhatsApp engine configured** — the state a fresh clone is in. Nothing touches a real
+store or sends a message. It asserts that every endpoint refuses work it
+cannot do (a missing store is a `409`, not a crash), that the audience schema
+exposes no way to pass phone numbers directly, and that every route in
+`src/app/api` appears in the OpenAPI document.
 
 ### API reference
 
@@ -1758,29 +1723,16 @@ Next.js handlers with Zod validation inside them, which no generator reads
 faithfully, and a generated document that drifts is worse than one somebody
 keeps honest. CI fails if a route exists that the document does not describe.
 
-### Continuous integration and deployment
+### Continuous integration
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and
-pull request: typecheck, lint, the end-to-end suite with a Playwright report
-uploaded on failure, and the API-documentation coverage check.
+pull request: typecheck, lint, the API-documentation coverage check, a Docker
+image build, and the end-to-end suite against a throwaway PostgreSQL service.
 
-**Deployment is Vercel's**, triggered by the push rather than by the workflow.
-What CI adds is a check that what Vercel published actually serves: when Vercel
-reports a deployment ready, a `smoke` job runs a separate suite against that
-deployment's URL.
-
-Smoke tests are kept apart from the main suite deliberately. The main suite
-asserts the *empty* state — no store, no gateway — which is right for a fresh
-clone and wrong for production, where a store is connected. The smoke suite
-asserts only what must be true of any live deployment: the app serves, the API
-description is available, settings answers, analytics either returns data or
-says no store is connected, and **no phone number appears in the analytics
-payload**.
-
-Run it against any deployment yourself:
+Smoke-test any running deployment:
 
 ```bash
-BASE_URL=https://your-deployment.vercel.app npx playwright test --project=smoke
+BASE_URL=https://your.domain npx playwright test --project=smoke
 ```
 
 ---

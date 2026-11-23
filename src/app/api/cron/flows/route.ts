@@ -29,10 +29,11 @@ export const maxDuration = 300;
 /**
  * Advances every active flow.
  *
- * Driven by Vercel Cron rather than by a browser, because a flow's defining
- * feature is waiting days between steps and nobody keeps a tab open for that.
+ * Driven by the `cron` service (docker/cron/crontab) rather than by a
+ * browser, because a flow's defining feature is waiting days between steps
+ * and nobody keeps a tab open for that.
  *
- * Runs once a day (Vercel's Hobby plan allows no more), at an hour chosen so
+ * Runs once a day, at 04:30 UTC, an hour chosen so
  * messages land mid-morning rather than overnight. A step is therefore sent on
  * the first run after it comes due, which makes waitDays the granularity a flow
  * actually has.
@@ -92,7 +93,7 @@ export async function GET(request: Request) {
 /**
  * Cron authorisation.
  *
- * Vercel sends the project's CRON_SECRET as a bearer token. This endpoint sends
+ * The `cron` service (docker/cron/crontab) sends CRON_SECRET as a bearer token. This endpoint sends
  * real messages to real customers, so an unset secret closes the route rather
  * than opening it — the failure mode of a missing environment variable must not
  * be "anyone on the internet can trigger the sends".

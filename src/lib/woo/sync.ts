@@ -1,6 +1,8 @@
 import { db } from "@/lib/db/client";
 import type { StoreConfig } from "@/lib/store/config";
 import { WooClient } from "./client";
+import { decodeEntities } from "./entities";
+import { customerForStorage, orderForStorage, productForStorage } from "./ingest";
 import type { WooCustomer, WooOrder, WooProduct } from "./types";
 
 /**
@@ -432,7 +434,7 @@ async function writeOrders(storeId: string, orders: WooOrder[]): Promise<void> {
           date_completed: utc(o.date_completed),
           date_modified: utc((o as { date_modified_gmt?: string }).date_modified_gmt),
           item_count: o.line_items?.length ?? 0,
-          raw: db().json(o as never),
+          raw: db().json(orderForStorage(o) as never),
         })) as never,
       )}
       on conflict (store_id, id) do update set
@@ -460,7 +462,7 @@ async function writeOrders(storeId: string, orders: WooOrder[]): Promise<void> {
         id: li.id,
         product_id: li.product_id ?? 0,
         variation_id: li.variation_id ?? 0,
-        name: li.name ?? null,
+        name: li.name ? decodeEntities(li.name) : null,
         quantity: li.quantity ?? 0,
         subtotal: num(li.subtotal),
         total: num(li.total),
@@ -499,7 +501,7 @@ async function writeCustomers(storeId: string, customers: WooCustomer[]): Promis
           total_spent: num((c as { total_spent?: string }).total_spent),
           date_created: utc(c.date_created),
           date_modified: utc((c as { date_modified_gmt?: string }).date_modified_gmt),
-          raw: db().json(c as never),
+          raw: db().json(customerForStorage(c) as never),
         })) as never,
       )}
       on conflict (store_id, id) do update set
@@ -531,7 +533,7 @@ async function writeProducts(storeId: string, products: WooProduct[]): Promise<v
           total_sales: Number((p as { total_sales?: number }).total_sales ?? 0),
           date_created: utc((p as { date_created?: string }).date_created),
           date_modified: utc((p as { date_modified_gmt?: string }).date_modified_gmt),
-          raw: db().json(p as never),
+          raw: db().json(productForStorage(p) as never),
         })) as never,
       )}
       on conflict (store_id, id) do update set

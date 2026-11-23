@@ -24,7 +24,7 @@ import { db } from "@/lib/db/client";
  */
 
 /** Distinguishes a key at a glance and makes a leaked one greppable. */
-const PREFIX = "pc_live_";
+const PREFIX = "sw_live_";
 
 /**
  * What a key is allowed to do.

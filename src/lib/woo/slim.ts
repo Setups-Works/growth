@@ -25,7 +25,7 @@ export function slimSnapshot(snapshot: StoreSnapshot): StoreSnapshot {
   return snapshot;
 }
 
-function slimOrder(order: WooOrder): WooOrder {
+export function slimOrder(order: WooOrder): WooOrder {
   const billing = order.billing ?? {};
 
   return {

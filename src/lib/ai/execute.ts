@@ -296,7 +296,7 @@ async function flows(userId: string): Promise<Json> {
 
 async function menu(userId: string): Promise<Json> {
   const config = await readWhatsAppConfig(userId);
-  if (!config) return { error: "No WhatsApp gateway is connected.", connected: false };
+  if (!config) return { error: "WhatsApp is not enabled on this server.", connected: false };
 
   const plugin = await new WhatsAppClient(config).getPlugin(PLUGIN_ID);
   const raw = (plugin.config ?? {}) as Partial<MenuConfig>;

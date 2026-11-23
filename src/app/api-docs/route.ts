@@ -36,7 +36,7 @@ const SCALAR_VERSION = "1.64.1";
 export const GET = ApiReference({
   content: openApiDocument,
   cdn: `https://cdn.jsdelivr.net/npm/@scalar/api-reference@${SCALAR_VERSION}`,
-  pageTitle: "PulseCommerce API reference",
+  pageTitle: "Setups Works Growth API reference",
   theme: "default",
   /*
    * Schemas are shown inline on each endpoint, where they are read. The
@@ -48,7 +48,7 @@ export const GET = ApiReference({
   // project. The other clients are still there in the dropdown.
   defaultHttpClient: { targetKey: "shell", clientKey: "curl" },
   metaData: {
-    title: "PulseCommerce API reference",
+    title: "Setups Works Growth API reference",
     description: "Every endpoint this application exposes, and how to authenticate to them.",
   },
 });

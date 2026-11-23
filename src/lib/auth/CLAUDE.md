@@ -7,10 +7,9 @@ thing to audit forever.
 
 ## tenant.ts — read this before writing any route handler
 
-The server reaches Postgres as the table owner over the transaction pooler,
-which bypasses row-level security. RLS policies exist on tenant tables but
-**do not protect anything on this path** — `tenant.ts` is what actually keeps
-one tenant from reading another's data.
+The server reaches Postgres as the table owner and the schema has no
+row-level security policies — `tenant.ts` is the only thing that keeps one
+tenant from reading another's data.
 
 Every request handler that touches a tenant-owned table must resolve a
 caller through one of:
@@ -27,7 +26,7 @@ catches the mistake. See `AGENTS.md` at the repo root for the fuller version
 of this warning.
 
 Two caller kinds resolve to the same `Tenant` shape: a browser session
-cookie (Supabase) and an API key (`Authorization: Bearer pc_live_...`). Code
+cookie (`sw_session`) and an API key (`Authorization: Bearer sw_live_...`). Code
 elsewhere in the app should not need to know or care which one it was —
 `tenant.via` and `tenant.scopes` exist for the few call sites that do (e.g.
 gating a write behind `scopes.includes("write")`).
@@ -51,22 +50,21 @@ parameter instead of this token for "whose store is this", stop; that's
 exactly the mistake this file exists to prevent (see its own top comment for
 the full reasoning).
 
-## cli-login.ts
+## password.ts / session.ts / current-user.ts / rate-limit.ts
 
-The device-authorization flow behind `pulse login` — mirrors OAuth 2.0's
-Device Authorization Grant shape without pulling in an OAuth library. No
-`approved` status is ever persisted: a raw API key is minted exactly once,
-inside the first poll that observes an approved, unexpired, still-pending
-row, in the same statement that flips it to `completed`. If you touch this
-file, preserve "minted exactly once" — it's the same guarantee
-`api-key.ts`'s dashboard-facing create-key flow already gives, applied to a
-flow that runs unattended in a terminal instead of in front of a person.
+Email + password accounts. `password.ts` hashes with scrypt (parameters stored
+in the hash, so they can be raised later). `session.ts` signs the `sw_session`
+cookie with AUTH_SECRET — verifying it is one HMAC, no database round trip,
+which is why Proxy can check every request. `current-user.ts` is for server
+components: it verifies the cookie *and* confirms the user row still exists.
+`rate-limit.ts` is in-memory and per process — right for the single-container
+deployment. Password-reset tokens (`/api/auth/forgot`, `/api/auth/reset`) are
+stored as SHA-256 digests only and consumed in the same statement that checks
+them; keep both properties.
 
-## session.ts / headers.ts
+## headers.ts
 
-Thin — session cookie handling and the two header names
-(`x-pulse-user-id` / `x-pulse-user-email`) `src/proxy.ts` sets after verifying
-a caller, so a route handler doesn't have to re-verify. These headers are
-only trustworthy because Proxy deletes any inbound copy before setting its
-own — nothing else may set them. Not places to add new logic; if you need
-something more than "read who's logged in," it belongs in `tenant.ts`.
+Thin — the header names (`x-sw-user-id` / `x-sw-user-email` / `x-sw-scopes`)
+`src/proxy.ts` sets after verifying a caller, so a route handler doesn't have
+to re-verify. These headers are only trustworthy because Proxy deletes any
+inbound copy before setting its own — nothing else may set them.

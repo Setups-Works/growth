@@ -21,7 +21,7 @@ import { PhoneScreen } from "@/components/marketing/landing/phone-screen";
 export const metadata: Metadata = {
   title: "WhatsApp",
   description:
-    "Campaigns personalised from each customer's own history, automated flows that stop when they buy, an out-of-hours menu that knows when to fetch a person, and one shared inbox — through a gateway you own.",
+    "Campaigns personalised from each customer's own history, automated flows that stop when they buy, an out-of-hours menu that knows when to fetch a person, and one shared inbox — from your own number, linked by scanning a QR code.",
   alternates: { canonical: "/whatsapp" },
 };
 
@@ -294,8 +294,8 @@ export default function WhatsAppPage() {
       <Section>
         <SectionHeading
           eyebrow="Delivery"
-          title="Through a gateway you own"
-          body="Run your own WhatsApp host and there is no per-message fee at all. Or use Meta's official Cloud API and get delivery backed by them. Everything above works identically either way."
+          title="Link your number with a QR code"
+          body="Scan once from WhatsApp → Linked devices and you are sending — no per-message fee at all. Or use Meta's official Cloud API and get delivery backed by them."
         />
         <div className="mt-10 grid gap-6 md:grid-cols-2">
           <BlurFade inView className="h-full">
@@ -303,10 +303,10 @@ export default function WhatsAppPage() {
               <span className="flex size-10 items-center justify-center rounded-lg border bg-muted/50">
                 <BrandMark icon={BRANDS.whatsapp} className="size-5" />
               </span>
-              <h3 className="mt-3 font-heading text-base font-medium">Your own host</h3>
+              <h3 className="mt-3 font-heading text-base font-medium">Linked device</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Your server, your number, your message history. No per-message cost however many you
-                send — use a dedicated number, never your main business line.
+                Your number, linked like WhatsApp Web. No per-message cost however many you send —
+                use a dedicated number, never your main business line.
               </p>
             </div>
           </BlurFade>

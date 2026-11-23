@@ -22,7 +22,7 @@ export async function GET(
   const { chatId } = await params;
   const config = await readWhatsAppConfig(resolved.value.userId);
   if (!config) {
-    return NextResponse.json({ error: "No WhatsApp gateway is connected." }, { status: 409 });
+    return NextResponse.json({ error: "WhatsApp is not enabled on this server." }, { status: 409 });
   }
 
   const limit = Math.min(Number(new URL(request.url).searchParams.get("limit")) || 60, 200);
@@ -93,7 +93,7 @@ export async function POST(
 
   const config = await readWhatsAppConfig(userId);
   if (!config) {
-    return NextResponse.json({ error: "No WhatsApp gateway is connected." }, { status: 409 });
+    return NextResponse.json({ error: "WhatsApp is not enabled on this server." }, { status: 409 });
   }
 
   // A bare number is accepted so a new conversation can be started by typing

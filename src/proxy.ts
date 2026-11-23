@@ -1,9 +1,9 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { readPresentedKey, verifyApiKey, type Scope } from "@/lib/auth/api-key";
 import { hasWhatsAppPlan } from "@/lib/billing/usage";
 import { databaseConfigured } from "@/lib/db/client";
-import { USER_EMAIL_HEADER, USER_ID_HEADER } from "@/lib/auth/headers";
+import { SCOPES_HEADER, USER_EMAIL_HEADER, USER_ID_HEADER } from "@/lib/auth/headers";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 
 /**
  * The single place a request is allowed in.
@@ -42,13 +42,11 @@ import { USER_EMAIL_HEADER, USER_ID_HEADER } from "@/lib/auth/headers";
  * is about a Lite account never seeing or reaching the feature at all, not
  * the only thing preventing a message from going out.
  *
- * ─── Why it also touches cookies ───────────────────────────────────────────
+ * ─── Sessions ──────────────────────────────────────────────────────────────
  *
- * Supabase access tokens are short-lived and refreshed against the refresh
- * token. A server component cannot set a cookie, so if the refresh did not
- * happen here it would never be persisted, and every request would arrive with
- * an expired token and re-refresh. This runs before the render and can write,
- * which makes it the right and only place for it.
+ * A session is a cookie signed with AUTH_SECRET (src/lib/auth/session.ts).
+ * Verifying it is one HMAC — no database round trip — so checking it on
+ * every request costs nothing worth measuring.
  */
 
 /**
@@ -65,6 +63,8 @@ const PUBLIC_API = new Set([
   "/api/auth/woo/return",
   // Reports whether you are signed in. Gating it would be circular.
   "/api/auth/session",
+  // Health probe for Docker and load balancers. Says only "up" or "down".
+  "/api/health",
   // Describes the API's shape. No store data, no credentials — and it is what
   // a developer reads to find out how to authenticate in the first place.
   "/api/openapi",
@@ -76,13 +76,15 @@ const PUBLIC_API = new Set([
   // Server-to-server from Razorpay, verified via an HMAC signature
   // (RAZORPAY_WEBHOOK_SECRET) inside the handler, not a session or key.
   "/api/billing/webhook",
-  // The first two legs of `pulse login`. There is no key to send yet — a
-  // device code stands in for one until a human approves it in a browser
-  // that already has a session. `/approve`, the third leg, is deliberately
-  // NOT here: it requires a session the normal way, the same reasoning as
-  // `/api/keys` — an API key must not be able to mint a login for itself.
-  "/api/cli/auth/start",
-  "/api/cli/auth/poll",
+  // Signing in, up and out, and recovering a password. Each authenticates
+  // the caller itself (password, or a one-time reset token) and is rate
+  // limited in its handler. /api/auth/password is deliberately NOT here: it
+  // changes the password of whoever is already signed in.
+  "/api/auth/signup",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/forgot",
+  "/api/auth/reset",
 ]);
 
 /**
@@ -114,7 +116,7 @@ function deny(status: number, error: string, hint: string) {
       status,
       // Tells a client library which scheme to retry with, instead of leaving
       // it to guess from a bare 401.
-      headers: { "WWW-Authenticate": 'Bearer realm="PulseCommerce API"' },
+      headers: { "WWW-Authenticate": 'Bearer realm="Setups Works Growth API"' },
     },
   );
 }
@@ -144,7 +146,6 @@ const PROTECTED_PAGES = [
   "/menu",
   "/connect",
   "/onboarding",
-  "/cli-login",
 ];
 
 /** Pages a Lite account (analytics only) is redirected away from. */
@@ -186,33 +187,14 @@ async function whatsappPlanGate(userId: string): Promise<NextResponse | null> {
 }
 
 export async function proxy(request: NextRequest) {
-  // Carries any refreshed auth cookies, whatever the outcome below.
   const response = NextResponse.next({ request });
 
-  const supabase = createSupabase(request, response);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
+  const user = session ? { id: session.userId, email: session.email } : null;
 
   const { pathname } = request.nextUrl;
 
   if (!pathname.startsWith("/api/")) {
-    /*
-     * A Supabase email link (magic link, OAuth, an invite) that isn't on the
-     * project's own Redirect URLs allowlist gets silently rewritten to the
-     * bare origin at click time, stranding its one-time `?code=` on the
-     * unauthenticated home page instead of `/auth/callback`, where the actual
-     * server-side code-for-session exchange happens. Rather than depend on
-     * that allowlist always being configured for every path this app might
-     * ever redirect through, forward a code landing here to the real
-     * handler — the home page has no legitimate reason to receive one itself.
-     */
-    if (pathname === "/" && request.nextUrl.searchParams.has("code")) {
-      const callback = new URL("/auth/callback", request.url);
-      callback.search = request.nextUrl.search;
-      return NextResponse.redirect(callback);
-    }
-
     /*
      * Signing in is not something you can do while signed in. Leaving the form
      * reachable means someone lands on it, cannot tell whether they are logged
@@ -239,11 +221,10 @@ export async function proxy(request: NextRequest) {
 
     /*
      * Remember where they were headed so signing in returns them there rather
-     * than dumping everyone on the dashboard. Includes the query string —
-     * `/cli-login` needs its `user_code` back, not just the bare path — read
-     * back through a path-only check on the other side (see the auth
-     * callback) because a value from a URL is attacker-controllable and an
-     * absolute one would turn sign-in into an open redirect.
+     * than dumping everyone on the dashboard. Includes the query string, read
+     * back through a path-only check on the other side (see auth-form.tsx)
+     * because a value from a URL is attacker-controllable and an absolute one
+     * would turn sign-in into an open redirect.
      */
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname + request.nextUrl.search);
@@ -270,7 +251,7 @@ export async function proxy(request: NextRequest) {
     return deny(
       503,
       "This deployment cannot authenticate requests.",
-      "SUPABASE_DB_POOL_URL is not set, so sessions and API keys cannot be checked.",
+      "DATABASE_URL is not set, so API keys cannot be checked.",
     );
   }
 
@@ -279,7 +260,7 @@ export async function proxy(request: NextRequest) {
       const deniedForSession = await whatsappPlanGate(user.id);
       if (deniedForSession) return deniedForSession;
     }
-    return forward(request, user.id, user.email ?? "");
+    return forward(request, user.id, user.email);
   }
 
   const presented = readPresentedKey(request.headers);
@@ -287,7 +268,7 @@ export async function proxy(request: NextRequest) {
     return deny(
       401,
       "Authentication required.",
-      "Sign in, or send an API key as `Authorization: Bearer pc_live_…`. Create one in Settings → API keys.",
+      "Sign in, or send an API key as `Authorization: Bearer sw_live_…`. Create one in Settings → API keys.",
     );
   }
 
@@ -296,7 +277,7 @@ export async function proxy(request: NextRequest) {
     return deny(
       401,
       "That API key is not valid.",
-      "It may have been revoked, or mistyped. Keys start with `pc_live_`.",
+      "It may have been revoked, or mistyped. Keys start with `sw_live_`.",
     );
   }
 
@@ -320,10 +301,8 @@ export async function proxy(request: NextRequest) {
 /**
  * Passes the verified caller to the handler.
  *
- * Proxy has already validated the token against the Auth server, and without
- * this the handler would do it again — two HTTP round trips to Supabase on
- * every single API request, which is most of why /api/settings took four
- * seconds.
+ * Proxy has already verified the caller, and without this every handler
+ * would have to do it again.
  *
  * Anything arriving under these names is deleted first. They come from the
  * public internet, and a handler must not be able to be told who it is talking
@@ -333,42 +312,13 @@ function forward(request: NextRequest, userId: string, email: string, scopes?: S
   const headers = new Headers(request.headers);
   headers.delete(USER_ID_HEADER);
   headers.delete(USER_EMAIL_HEADER);
-  headers.delete("x-pulse-scopes");
+  headers.delete(SCOPES_HEADER);
   headers.set(USER_ID_HEADER, userId);
   headers.set(USER_EMAIL_HEADER, email);
   // Only set for a key. Its absence is how a handler tells a session — which
   // may do anything — from a key that may not.
-  if (scopes) headers.set("x-pulse-scopes", scopes.join(","));
+  if (scopes) headers.set(SCOPES_HEADER, scopes.join(","));
   return NextResponse.next({ request: { headers } });
-}
-
-/**
- * A Supabase client wired to this request's cookies.
- *
- * `getUser` is what validates the token — never `getSession`, which returns
- * whatever the cookie says without checking it. A cookie is client-controlled,
- * so trusting it would let anyone claim any account.
- */
-function createSupabase(request: NextRequest, response: NextResponse) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    // No Supabase configured: no sessions exist, so every caller falls through
-    // to the API-key path below.
-    return { auth: { getUser: async () => ({ data: { user: null } }) } } as ReturnType<
-      typeof createServerClient
-    >;
-  }
-
-  return createServerClient(url, key, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll: (list) => {
-        for (const { name, value, options } of list) response.cookies.set(name, value, options);
-      },
-    },
-  });
 }
 
 export const config = {

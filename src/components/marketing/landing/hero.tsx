@@ -88,7 +88,7 @@ export function Hero() {
 
         <BlurFade delay={0.2} inView>
           <p className="mx-auto mt-6 max-w-2xl text-center text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg md:text-xl">
-            WooCommerce tells you what sold. PulseCommerce tells you who bought it, which of them is
+            WooCommerce tells you what sold. Setups Works Growth tells you who bought it, which of them is
             slipping away, and what to say to bring them back — from one screen.
           </p>
         </BlurFade>
@@ -141,7 +141,7 @@ export function Hero() {
         <BlurFade delay={0.38} inView className="relative mt-14">
           <div aria-hidden className="relative lg:pr-24">
             <div className="relative overflow-hidden rounded-xl ring-1 ring-foreground/10 shadow-[0_24px_80px_-24px_rgb(0_0_0/0.35)]">
-              <Safari url="app.pulsecommerce.io/dashboard" className="w-full">
+              <Safari url="growth.setups.works/dashboard" className="w-full">
                 <ProductScreen view="overview" />
               </Safari>
               <BorderBeam

@@ -1,47 +1,29 @@
 # src/lib/whatsapp — orientation for AI agents
 
-Everything here talks to a gateway you (the merchant) run yourself, never to
-a third-party messaging API — see `AGENTS.md` and `README.md` § WhatsApp
-campaigns for why. The gotchas below are specific to this directory.
+Everything here talks to the bundled WhatsApp engine (`whatsapp/`, the
+`whatsapp` compose service) — one linked-device session per account, never a
+third-party messaging API. See `AGENTS.md`. The gotchas below are specific to
+this directory.
 
 ## config.ts is per-tenant. It must stay that way.
 
-`whatsapp_config` (single-tenant) was dropped for `whatsapp_connections`
-(per-user) in the multi-tenant migration, and every exported function here
-takes `userId` as its first real parameter as a result —
-`readWhatsAppConfig(userId)`, `writeWhatsAppConfig(userId, config)`,
-`clearWhatsAppConfig(userId)`, `rememberAdoptedSession(userId, sessionId)`.
-This was a real, long-lived production bug (see `AGENTS.md` § "Known-shape
-bug"): every WhatsApp route silently broke until it was fixed. If you add a
-new function to this file, or a new per-tenant config table anywhere in the
-app, it needs a real `userId`/tenant parameter — a config helper with no id
-parameter in a multi-tenant app has no way to be correct.
+Every exported function takes `userId` as a real parameter, and an account's
+engine session id *is* its user id. `readWhatsAppConfig(userId)` returns null
+only when the deployment has no engine (`WHATSAPP_ENGINE_URL` unset); non-null
+does not mean a number is linked — check the session before sending. A config
+helper with no id parameter in a multi-tenant app has no way to be correct
+(see `AGENTS.md` § "Known-shape bug").
 
-## client.ts — shapes are checked against a live gateway, not the schema
+## client.ts ↔ whatsapp/src/server.mjs
 
-This app's gateway is a self-hosted fork of OpenWA at
-**https://github.com/rmyndharis/OpenWA** — that repo, not the upstream
-OpenWA project or its published docs, is the actual source of truth for
-every endpoint, plugin, and response shape this client talks to. If you're
-adding a new gateway call or a new plugin integration, read the route
-handler in that repo first; don't infer behavior from OpenWA's general
-documentation, which this fork has already been found to disagree with.
-
-The comment at the top of this file is not decorative: this gateway's
-documented schema and its actual behavior disagree in at least one place
-that matters (session state lives on `GET /api/sessions/{id}`, not
-`/status`, which is the WhatsApp Stories API and returns `{"statuses":[]}`
-regardless of what the session is doing). If you add a new gateway call,
-verify the response shape against a real running instance of the gateway
-(or the fork's own source) before trusting any docs — the existing shapes
-in this file already paid that cost once.
+`client.ts` is the only caller of the engine's HTTP API, whose shapes are
+documented at the top of `whatsapp/src/server.mjs`. Change both together.
 
 `isSessionSendable(session)` is the one gate every send path checks before
-calling `sendText`/`sendMedia`. `ensureSendable()` reconciles the persisted
-`status` column against the gateway's live state — after a gateway restart
-the database can still say `ready` while the engine is actually gone, and a
-send in that state fails for every recipient. Don't add a second path that
-sends without going through this check.
+calling `sendText`/`sendImage`/`sendVideo`/`sendBulk`. `ensureSendable()`
+restarts a session whose pairing is on disk but whose socket is down (e.g.
+right after the engine restarts) and waits briefly for it. Don't add a second
+path that sends without going through this check.
 
 ## phone.ts — conservative on purpose
 

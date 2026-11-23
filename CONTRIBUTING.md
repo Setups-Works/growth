@@ -1,4 +1,4 @@
-# Contributing to PulseCommerce
+# Contributing to Setups Works Growth
 
 This project is built and reviewed with AI coding agents (Claude Code, Codex,
 and similar) in the loop, not as an afterthought — the files below exist
@@ -12,24 +12,22 @@ optional reading.
    skimming it costs you more time later than reading it now.
 2. Read [AGENTS.md](AGENTS.md) — the things a careful read of the code alone
    won't surface fast enough: real gotchas from real incidents in this
-   codebase (the pg_cron-not-Vercel-Cron mixup, the per-tenant config bug
+   codebase (the per-tenant config bug
    shape, the tenant-scoping chokepoint). `CLAUDE.md` at the repo root loads
    this automatically for AI agents; read it yourself too.
 3. If you're about to touch one of these subsystems, its own `CLAUDE.md`
    has the local gotchas AGENTS.md doesn't repeat:
    - [src/lib/auth/CLAUDE.md](src/lib/auth/CLAUDE.md) — the tenant-scoping chokepoint
-   - [src/lib/whatsapp/CLAUDE.md](src/lib/whatsapp/CLAUDE.md) — gateway sessions, per-tenant config
+   - [src/lib/whatsapp/CLAUDE.md](src/lib/whatsapp/CLAUDE.md) — engine sessions, per-tenant config
    - [src/lib/woo/CLAUDE.md](src/lib/woo/CLAUDE.md) — WooCommerce client, field trimming, scope
    - [src/lib/analytics/CLAUDE.md](src/lib/analytics/CLAUDE.md) — the pure engine and its cache
    - [src/app/api/CLAUDE.md](src/app/api/CLAUDE.md) — route conventions, OpenAPI, auth
-   - [supabase/migrations/CLAUDE.md](supabase/migrations/CLAUDE.md) — pg_cron, migration workflow
-   - [packages/sdk/CLAUDE.md](packages/sdk/CLAUDE.md) and [packages/cli/CLAUDE.md](packages/cli/CLAUDE.md)
 
 ## Working with an AI agent on this repo
 
 - **Give it the same reading list above.** An agent that hasn't read
   `AGENTS.md` will confidently reintroduce bugs this project already paid to
-  fix once — the Vercel Cron assumption and the `whatsapp_config` table are
+  fix once — a Supabase/Vercel assumption and the `whatsapp_config` table are
   the two most likely to come back from training-data priors alone.
 - **The tenant chokepoint is not negotiable.** Any agent-written handler that
   queries a tenant-owned table must go through `resolveTenant` /
@@ -40,12 +38,9 @@ optional reading.
 - **New routes need an OpenAPI entry in the same commit.**
   `scripts/check-openapi.mjs` fails CI otherwise. Point the agent at
   `src/lib/openapi.ts` and an existing route of the same shape.
-- **The WhatsApp gateway is a specific fork, not upstream OpenWA.**
-  Everything WhatsApp-facing talks to
-  https://github.com/rmyndharis/OpenWA, and that repo's source is the
-  source of truth for its behavior — not OpenWA's own docs, which this fork
-  has already been found to disagree with. Point the agent at that repo
-  before it adds a new gateway call or plugin integration; see
+- **WhatsApp is the bundled engine in `whatsapp/`.** Its HTTP API
+  (`whatsapp/src/server.mjs`) and the app's client
+  (`src/lib/whatsapp/client.ts`) change together; see
   `src/lib/whatsapp/CLAUDE.md`.
 - **Anything that can message a real phone number needs a human in the
   loop.** Test sends go to one established test number, never a number read
@@ -59,7 +54,7 @@ optional reading.
 
 ## Picking up a Jira issue
 
-Work is tracked on the [PulseCommerce Jira board](https://setups-works.atlassian.net/jira/software/projects/PUL/boards/2),
+Work is tracked on the [Setups Works Growth Jira board](https://setups-works.atlassian.net/jira/software/projects/PUL/boards/2),
 not GitHub Issues. Most issues carry an **"Agent prompt" comment** — hand
 that to your coding agent (Claude Code, Antigravity, or similar) directly
 rather than just the issue title; it already has the file pointers and a
@@ -126,5 +121,4 @@ subsystem's `CLAUDE.md` before assuming a shortcut is safe.
 - If your change affects a documented behavior in `README.md` (a pipeline, a
   cron cadence, an environment variable), update the README in the same PR.
   A README claim that quietly goes stale is exactly the kind of bug this
-  project has already been bitten by once (see the Vercel Cron history in
-  `AGENTS.md`).
+  project has already been bitten by once.

@@ -45,6 +45,8 @@ const cache = new Map<string, AnalyticsResult>();
 export interface SnapshotVersion {
   storeUrl: string;
   fetchedAt: string;
+  /** Tags the shared-cache row so stale ones can be pruned after a sync. */
+  storeId?: string;
 }
 
 function keyFor(snapshot: SnapshotVersion, opts: AnalyticsOptions): string {
@@ -216,7 +218,7 @@ export async function getAnalyticsForVersion(
   const snapshot = await loadSnapshot();
   const result = computeAnalytics(snapshot, opts);
   remember(key, result);
-  void writeShared(sharedCacheKey, result);
+  void writeShared(sharedCacheKey, result, version.storeId);
   return result;
 }
 

@@ -2,7 +2,7 @@
 
 The canonical, step-by-step protocol an AI coding agent (Claude Code,
 Antigravity, or similar) follows when asked to build a new feature for
-PulseCommerce. It exists so any agent — regardless of session, regardless of
+Setups Works Growth. It exists so any agent — regardless of session, regardless of
 which developer is driving — reaches the same Jira state at the same point
 in the work, without being told this from scratch each time.
 

@@ -55,8 +55,20 @@ function currentPeriod(): string {
  * same "actually usable" check Go always did, differing only in the cap
  * once usable.
  */
+/**
+ * Whether this deployment charges for plans at all.
+ *
+ * Billing is enforced only when Razorpay is configured. A self-hosted server
+ * without it has no way to buy a plan, so gating features behind one would
+ * lock every account out of WhatsApp permanently; instead every account is
+ * treated as unlimited.
+ */
+export function billingEnforced(): boolean {
+  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+}
+
 export function planMessageLimit(profile: BillingProfile): number | null {
-  if (profile.legacy_unlimited) return null;
+  if (!billingEnforced() || profile.legacy_unlimited) return null;
   // Lite has no WhatsApp allowance at all, regardless of subscription status
   // -- there is no "usable Lite subscription that can still send," unlike Go
   // past_due getting a grace window. See planIncludesWhatsApp for the same
@@ -150,7 +162,7 @@ export async function recordSend(userId: string, count = 1): Promise<void> {
  * there for what this gates.
  */
 export function planIncludesWhatsApp(profile: Pick<BillingProfile, "plan" | "legacy_unlimited">): boolean {
-  if (profile.legacy_unlimited) return true;
+  if (!billingEnforced() || profile.legacy_unlimited) return true;
   return profile.plan === "go" || profile.plan === "plus";
 }
 
@@ -161,6 +173,7 @@ export function planIncludesWhatsApp(profile: Pick<BillingProfile, "plan" | "leg
  * alongside a usage query.
  */
 export async function hasWhatsAppPlan(userId: string): Promise<boolean> {
+  if (!billingEnforced()) return true;
   const [profile] = await db()<Pick<BillingProfile, "plan" | "legacy_unlimited">[]>`
     select plan, legacy_unlimited from profiles where id = ${userId}
   `;

@@ -129,9 +129,9 @@ export default function MenuPage() {
                 </Badge>
               </CardTitle>
               <CardDescription className="text-xs">
-                What a customer receives when they message you first. It runs on the
-                gateway, so it answers at three in the morning whether or not anything
-                else is running.
+                What a customer receives when they message you first. It runs on your
+                linked WhatsApp number around the clock, so it answers at three in the
+                morning.
               </CardDescription>
             </div>
 
@@ -164,9 +164,8 @@ export default function MenuPage() {
         <CardContent className="space-y-4">
           {!installed ? (
             <Alert>
-              The menu extension is not installed on your gateway, so nothing here can
-              answer yet. Install <code>chat-flow</code> from the gateway&apos;s plugin
-              catalogue first.
+              WhatsApp is not linked yet, so nothing here can answer. Link a number in
+              Settings → WhatsApp first.
             </Alert>
           ) : null}
 

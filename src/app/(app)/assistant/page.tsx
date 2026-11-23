@@ -85,7 +85,7 @@ interface Chat {
  * store, secure or delete. The cost is that history does not follow you to
  * another machine, which is the right trade for a single-operator tool.
  */
-const STORE_KEY = "pulsecommerce-assistant-chats";
+const STORE_KEY = "growth-assistant-chats";
 const MAX_CHATS = 30;
 
 function loadChats(): Chat[] {

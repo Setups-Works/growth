@@ -1,37 +1,15 @@
 import postgres, { type Sql } from "postgres";
 
 /**
- * The connection to Supabase Postgres.
+ * The connection to PostgreSQL — the only way the server reaches stored data.
  *
- * This is the only way the server reaches stored data. It replaces the
- * key-value abstraction that used to sit here with three interchangeable
- * backends — filesystem, Redis, Supabase-over-REST — chosen from whatever
- * happened to be configured. That flexibility bought nothing and cost a great
- * deal: the same data behaved differently depending on the deployment, nothing
- * could be queried, and every write was a whole-document rewrite with no way
- * to express a constraint.
+ * Configured by DATABASE_URL. In the Docker setup that points at the `db`
+ * service in docker-compose.yml; on Azure it can equally point at Azure
+ * Database for PostgreSQL (add `?sslmode=require`).
  *
- * ─── Why the pooler, and why not PostgREST ─────────────────────────────────
- *
- * Serverless functions are many short-lived processes. Postgres allocates a
- * backend process per connection and runs out long before the platform runs
- * out of function instances, so connecting directly does not survive traffic.
- * The transaction pooler on port 6543 hands out a server connection for the
- * duration of a statement and takes it straight back, which is the right shape
- * for functions that open one connection, run one query and exit.
- *
- * PostgREST would have avoided the problem by being stateless HTTP, but it
- * applies row level security, and every table here has RLS on with no
- * policies precisely so that no browser-reachable key can touch them. Reaching
- * them over PostgREST would have needed the service-role key. Connecting as
- * the table owner is both simpler and the thing RLS was configured to expect.
- *
- * ─── Constraints the pooler imposes ────────────────────────────────────────
- *
- * Transaction mode gives a different server connection per transaction, so
- * anything that assumes a persistent session breaks. `prepare: false` is
- * required: prepared statements live on the server connection, and the next
- * statement will not be on the same one.
+ * The app runs as one long-lived Node process, so this is an ordinary small
+ * pool. Set DATABASE_PREPARE=false when connecting through a transaction-mode
+ * pooler such as PgBouncer, which cannot keep prepared statements.
  */
 
 let client: Sql | null = null;
@@ -39,21 +17,15 @@ let client: Sql | null = null;
 export class DatabaseNotConfiguredError extends Error {
   constructor() {
     super(
-      "SUPABASE_DB_POOL_URL is not set, so there is nowhere to read or write. " +
-        "Copy the transaction-pooler connection string from Supabase → Project " +
-        "Settings → Database → Connection pooling, and set it on the host.",
+      "DATABASE_URL is not set, so there is nowhere to read or write. " +
+        "Set it to a PostgreSQL connection string, e.g. postgres://user:pass@db:5432/growth.",
     );
     this.name = "DatabaseNotConfiguredError";
   }
 }
 
 function connectionString(): string | null {
-  return (
-    process.env.SUPABASE_DB_POOL_URL ??
-    process.env.SUPABASE_DB_URL ??
-    process.env.DATABASE_URL ??
-    null
-  );
+  return process.env.DATABASE_URL || null;
 }
 
 /** True when this deployment can reach a database at all. */
@@ -68,26 +40,15 @@ export function db(): Sql {
   if (!url) throw new DatabaseNotConfiguredError();
 
   client = postgres(url, {
-    // See above: mandatory in transaction pooling mode.
-    prepare: false,
-    /*
-     * One connection per function instance. A serverless instance handles one
-     * request at a time, so a larger pool would only reserve pooler slots that
-     * this instance cannot use while denying them to another instance.
-     */
-    max: 1,
-    /*
-     * Measured: the TLS and auth handshake to the pooler costs ~1.6s, while a
-     * warm query costs ~140ms. Dropping the connection after twenty seconds
-     * meant almost every page load paid that handshake again — it was the
-     * single largest cost in a request, far outweighing the queries.
-     *
-     * Five minutes keeps it alive across a browsing session while still
-     * releasing the pooler slot from an instance that has gone quiet.
-     */
+    prepare: process.env.DATABASE_PREPARE !== "false",
+    max: Number(process.env.DATABASE_POOL_SIZE ?? 10),
     idle_timeout: 300,
     connect_timeout: 10,
-    ssl: "require",
+    /*
+     * SSL follows the connection string (`?sslmode=require`), so the local
+     * Docker database works over the private network without certificates
+     * and a managed cloud database still gets TLS.
+     */
     // Postgres returns numeric as a string to avoid float precision loss.
     // These are money; parse them explicitly at the boundary rather than
     // letting a string reach arithmetic somewhere downstream.
@@ -99,10 +60,7 @@ export function db(): Sql {
         parse: (value: string) => Number(value),
       },
     },
-    onnotice: () => {
-      // `create table if not exists` and friends are chatty on every cold
-      // start. Real problems arrive as errors.
-    },
+    onnotice: () => {},
   });
 
   return client;

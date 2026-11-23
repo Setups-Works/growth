@@ -47,7 +47,7 @@ const CAN_READ = [
   "Customer segments, value tiers and churn risk",
   "Product performance, stock cover and affinity",
   "Campaign history and flow membership",
-  "Whether the WhatsApp gateway is connected",
+  "Whether your WhatsApp number is linked",
 ];
 
 const CANNOT = [
@@ -192,7 +192,7 @@ export default function AiPage() {
             aria-hidden
             className="overflow-hidden rounded-xl ring-1 ring-foreground/10 shadow-[0_16px_50px_-20px_rgb(0_0_0/0.3)]"
           >
-            <Safari url="app.pulsecommerce.io/customers" className="w-full">
+            <Safari url="growth.setups.works/customers" className="w-full">
               <ProductScreen view="customers" />
             </Safari>
           </div>

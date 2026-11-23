@@ -5,11 +5,10 @@
  * the inbox lets a person reply. Nothing answers automatically, because nothing
  * here is running when a customer writes at three in the morning.
  *
- * This is the other direction, and it does not run here at all — it runs as a
- * plugin inside the gateway, which is what lets it answer at any hour. What
- * lives in this file is the editing model and the calls that read and write the
- * plugin's configuration, so the menu can be built on a screen rather than by
- * hand-writing JSON against an API.
+ * This is the other direction, and it does not run in the web app — it runs in
+ * the WhatsApp engine (whatsapp/src/menu-bot.mjs), which is what lets it answer
+ * at any hour. What lives in this file is the editing model, so the menu can be
+ * built on a screen.
  */
 
 /** One menu entry: what the customer types, and what they get back. */

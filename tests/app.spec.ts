@@ -7,40 +7,35 @@ import { expect, test } from "@playwright/test";
  * says what is missing rather than showing an empty dashboard or an error page.
  */
 
-test("the root page invites you to connect a store", async ({ page }) => {
+test("the home page introduces the product and offers sign-in", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveTitle(/PulseCommerce/i);
-  await expect(page.getByRole("button", { name: /continue to woocommerce/i })).toBeVisible();
+  await expect(page).toHaveTitle(/Setups Works Growth/i);
+  await expect(page.getByRole("link", { name: /log in|sign in/i }).first()).toBeVisible();
 });
 
-test("the connect form refuses a plainly invalid URL", async ({ page }) => {
-  await page.goto("/");
+test("signed out, the dashboard redirects to sign-in", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login\?next=%2Fdashboard/);
+  await expect(page.getByLabel("Email")).toBeVisible();
+});
+
+test("a new account lands on the connect form, which refuses a plainly invalid URL", async ({ page }) => {
+  const res = await page.request.post("/api/auth/signup", {
+    data: { email: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: "e2e-password-1" },
+  });
+  expect(res.ok()).toBeTruthy();
+
+  await page.goto("/connect");
   const input = page.getByLabel(/store url/i);
   await input.fill("x");
   await page.getByRole("button", { name: /continue to woocommerce/i }).click();
-
-  // The form guards with HTML constraint validation rather than a disabled
-  // button, so the assertion is that submission is blocked: still on the
-  // connect page, and the browser considers the field invalid.
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/connect/);
   expect(await input.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
 });
 
 test("the API reference renders the spec", async ({ page }) => {
   await page.goto("/api-docs");
-
-  /*
-   * Swagger UI is served from the bundle, not a CDN, so this asserts the
-   * rendered result rather than the wiring: a real operation from the real
-   * document, which fails if the spec stops parsing or the viewer stops
-   * mounting. Neither was checkable while it depended on a third-party script.
-   */
-  await expect(page.getByText("/api/whatsapp/broadcast").first()).toBeVisible({
-    timeout: 20_000,
-  });
-});
-
-test("dashboard pages ask for a store rather than rendering empty charts", async ({ page }) => {
-  await page.goto("/dashboard");
-  await expect(page.getByText(/connect|woocommerce/i).first()).toBeVisible({ timeout: 15_000 });
+  // Rendered by Scalar from the bundled spec: a real heading from the real
+  // document, which fails if the spec stops parsing or the viewer stops mounting.
+  await expect(page.getByRole("heading", { name: "Setups Works Growth API" })).toBeVisible({ timeout: 20_000 });
 });

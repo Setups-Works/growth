@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
   const config = await readWhatsAppConfig(tenant.userId);
   if (!config) {
-    return NextResponse.json({ error: "No WhatsApp gateway is connected." }, { status: 409 });
+    return NextResponse.json({ error: "WhatsApp is not enabled on this server." }, { status: 409 });
   }
 
   try {
@@ -96,7 +96,7 @@ async function withCustomerNames(
      * three-column SQL query rather than the full `raw` order documents.
      */
     const [analytics, phoneByKey] = await Promise.all([
-      getAnalyticsForVersion({ storeUrl: store.url, fetchedAt: store.lastSyncAt ?? "" }, () =>
+      getAnalyticsForVersion({ storeUrl: store.url, fetchedAt: store.lastSyncAt ?? "", storeId: store.id }, () =>
         loadSnapshot(store),
       ),
       readPhoneByCustomerKey(store.id),

@@ -10,7 +10,7 @@ import { Marquee } from "@/components/ui/marquee";
  * caught in, and this codebase already refuses to invent figures elsewhere.
  *
  * What it shows instead is verifiable and more useful to the person reading
- * it: the systems PulseCommerce actually connects to. A WooCommerce merchant
+ * it: the systems Setups Works Growth actually connects to. A WooCommerce merchant
  * scanning this row is looking for their own stack, and finding it answers a
  * real question that a row of strangers' logos does not.
  *

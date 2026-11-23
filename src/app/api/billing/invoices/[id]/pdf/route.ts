@@ -50,7 +50,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="pulsecommerce-invoice-${row.id.slice(0, 8)}.pdf"`,
+      "Content-Disposition": `attachment; filename="setups-works-growth-invoice-${row.id.slice(0, 8)}.pdf"`,
       "Content-Length": String(buffer.byteLength),
       // A billing_invoices row is written once by the webhook and never
       // updated by any code path in this app -- re-downloading the same

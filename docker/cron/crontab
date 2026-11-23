@@ -1,0 +1,7 @@
+# Setups Works Growth schedule (UTC). Edit here, then `docker compose up -d --build cron`.
+# __APP_URL__ and __CRON_SECRET__ are filled in from the environment at start.
+#
+# min  hour dom mon dow  job
+*/10   *    *   *   *    wget -qO- -T 290 --header "Authorization: Bearer __CRON_SECRET__" --post-data "" __APP_URL__/api/cron/sync >/dev/null 2>&1 || echo "[cron] sync failed"
+30     4    *   *   *    wget -qO- -T 290 --header "Authorization: Bearer __CRON_SECRET__" --post-data "" __APP_URL__/api/cron/flows >/dev/null 2>&1 || echo "[cron] flows failed"
+*/5    *    *   *   *    wget -qO- -T 110 --header "Authorization: Bearer __CRON_SECRET__" --post-data "" __APP_URL__/api/cron/abandoned-checkouts >/dev/null 2>&1 || echo "[cron] abandoned-checkouts failed"

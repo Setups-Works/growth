@@ -5,7 +5,7 @@ import { Cta } from "@/components/marketing/landing/cta";
 
 export const metadata: Metadata = {
   title: "About",
-  description: "PulseCommerce is a product of Setups Works — who we are, and how to reach us.",
+  description: "Setups Works Growth is a product of Setups Works — who we are, and how to reach us.",
   alternates: { canonical: "/about" },
 };
 
@@ -20,12 +20,12 @@ export default function AboutPage() {
     <main>
       <Section className="max-w-3xl pt-16 md:pt-24">
         <h1 className="text-4xl leading-[1.1] font-semibold tracking-tight text-balance sm:text-5xl">
-          About PulseCommerce
+          About Setups Works Growth
         </h1>
 
         <div className="mt-8 space-y-8 text-base leading-relaxed text-muted-foreground">
           <p>
-            PulseCommerce is a self-hosted analytics and WhatsApp-messaging platform for
+            Setups Works Growth is a self-hosted analytics and WhatsApp-messaging platform for
             WooCommerce stores. It turns a store&apos;s order history into RFM segmentation, cohort
             retention, product affinity, and a revenue forecast — then lets a merchant act on that
             directly over WhatsApp, through a connection the merchant controls.
@@ -36,7 +36,7 @@ export default function AboutPage() {
               The company behind it
             </h2>
             <p className="mt-2">
-              PulseCommerce is a product of{" "}
+              Setups Works Growth is a product of{" "}
               <span className="font-medium text-foreground">Setups Works</span>, registered as a
               Micro, Small &amp; Medium Enterprise in India under Udyam Registration number{" "}
               <span className="font-medium text-foreground">UDYAM-TN-24-0086773</span>.
@@ -47,8 +47,8 @@ export default function AboutPage() {
             <h2 className="text-lg font-semibold tracking-tight text-foreground">Contact</h2>
             <p className="mt-2">
               For anything — support, a partnership question, a security report —{" "}
-              <a href="mailto:hello@pulsecommerce.io" className="text-primary hover:underline">
-                hello@pulsecommerce.io
+              <a href="mailto:hello@setups.works" className="text-primary hover:underline">
+                hello@setups.works
               </a>
               .
             </p>

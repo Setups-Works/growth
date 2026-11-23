@@ -52,7 +52,7 @@ export function WhatsAppLinkQr({ onLinked }: { onLinked?: () => void }) {
         const body = (await res.json()) as SessionPayload;
 
         if (!res.ok) {
-          toast.error(body.error ?? "Could not reach the gateway.");
+          toast.error(body.error ?? "Could not reach WhatsApp.");
           setBusy(false);
           return;
         }

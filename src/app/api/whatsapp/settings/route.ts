@@ -3,105 +3,70 @@ import { z } from "zod";
 import { requireTenant } from "@/lib/auth/tenant";
 import {
   clearWhatsAppConfig,
-  configuredByEnvironment,
-  rememberAdoptedSession,
-  DEFAULT_SEND_DELAY_MS,
   MIN_SEND_DELAY_MS,
-  normaliseBaseUrl,
   readWhatsAppConfig,
   redactWhatsAppConfig,
-  writeWhatsAppConfig,
-  type WhatsAppConfig,
+  writeWhatsAppPreferences,
 } from "@/lib/whatsapp/config";
-import { isSessionSendable, READY_STATUS, WhatsAppApiError, WhatsAppClient } from "@/lib/whatsapp/client";
+import { isSessionSendable, WhatsAppApiError, WhatsAppClient } from "@/lib/whatsapp/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Connection state, plus the gateway's live view of the session. */
+/**
+ * This account's WhatsApp: whether a number is linked, and its sending
+ * preferences. Linking itself (the QR) is /api/whatsapp/session.
+ */
 export async function GET(request: Request) {
   const resolved = await requireTenant(request);
   if (!resolved.ok) return resolved.response;
   const { userId } = resolved.value;
 
-  const fromEnv = configuredByEnvironment();
   const config = await readWhatsAppConfig(userId);
   if (!config) {
-    return NextResponse.json({ connected: false, config: null, session: null, fromEnv });
+    return NextResponse.json({
+      available: false,
+      connected: false,
+      config: null,
+      session: null,
+      error: "WhatsApp is not enabled on this server (WHATSAPP_ENGINE_URL is not set).",
+    });
   }
 
   let session = null;
   let error: string | null = null;
-  let sessionId = config.sessionId;
-
   try {
-    const client = new WhatsAppClient(config);
-
-    if (!sessionId) {
-      // WHATSAPP_SESSION_ID was omitted, so adopt the gateway's session and
-      // remember it — the alternative is failing for a value the gateway can
-      // simply be asked for.
-      const sessions = await client.listSessions();
-      const ready = sessions.filter((s) => s.status === READY_STATUS);
-      const chosen = ready.length === 1 ? ready[0] : sessions.length === 1 ? sessions[0] : null;
-      if (!chosen) {
-        return NextResponse.json({
-          connected: true,
-          config: redactWhatsAppConfig(config),
-          session: null,
-          fromEnv,
-          error:
-            sessions.length === 0
-              ? "The gateway has no WhatsApp sessions. Create one in OpenWA."
-              : `The gateway has ${sessions.length} sessions. Set WHATSAPP_SESSION_ID to the one to send from.`,
-        });
-      }
-      sessionId = chosen.id;
-      await rememberAdoptedSession(userId, sessionId).catch(() => {});
+    session = await new WhatsAppClient(config).ensureSendable(8_000);
+    // Remember the linked number so it can be shown even while disconnected.
+    if (session.phone && session.phone !== config.phone) {
+      await writeWhatsAppPreferences(userId, { phone: session.phone }).catch(() => {});
+      config.phone = session.phone;
     }
-
-    session = await new WhatsAppClient({ ...config, sessionId }).ensureSendable();
   } catch (err) {
-    error = err instanceof Error ? err.message : "The gateway could not be reached.";
+    error = err instanceof Error ? err.message : "The WhatsApp engine could not be reached.";
   }
 
+  const ready = session ? isSessionSendable(session) : false;
   return NextResponse.json({
-    connected: true,
-    config: redactWhatsAppConfig({ ...config, sessionId }),
+    available: true,
+    connected: ready,
+    config: redactWhatsAppConfig(config),
     session,
-    ready: session ? isSessionSendable(session) : false,
-    fromEnv,
+    ready,
     error,
   });
 }
 
 const schema = z.object({
-  baseUrl: z.string().min(4),
-  apiKey: z.string().min(8),
-  /** Optional: when absent the only ready session on the gateway is adopted. */
-  sessionId: z.string().optional(),
-  defaultDialCode: z.string().optional(),
+  defaultDialCode: z.string().max(4).optional(),
   delayBetweenMessagesMs: z.coerce.number().int().min(MIN_SEND_DELAY_MS).max(60_000).optional(),
 });
 
-/**
- * Verifies a gateway before saving it. A connection that cannot answer is worse
- * than none: it would surface as a failed broadcast halfway through a campaign.
- */
+/** Saves the default country code and sending pace. */
 export async function PUT(request: Request) {
   const resolved = await requireTenant(request);
   if (!resolved.ok) return resolved.response;
   const { userId } = resolved.value;
-
-  if (configuredByEnvironment()) {
-    return NextResponse.json(
-      {
-        error:
-          "The gateway is set by environment variables, so it cannot be changed here. Edit WHATSAPP_API_URL and WHATSAPP_API_KEY on the host and redeploy.",
-      },
-      { status: 409 },
-    );
-  }
 
   let body: unknown;
   try {
@@ -112,113 +77,39 @@ export async function PUT(request: Request) {
 
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues.map((i) => i.message).join(" ") },
-      { status: 422 },
-    );
+    return NextResponse.json({ error: parsed.error.issues.map((i) => i.message).join(" ") }, { status: 422 });
   }
 
-  let baseUrl: string;
-  try {
-    baseUrl = normaliseBaseUrl(parsed.data.baseUrl);
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Invalid gateway URL." },
-      { status: 422 },
-    );
-  }
+  await writeWhatsAppPreferences(userId, {
+    defaultDialCode:
+      parsed.data.defaultDialCode !== undefined ? parsed.data.defaultDialCode.replace(/\D/g, "") : undefined,
+    delayBetweenMessagesMs: parsed.data.delayBetweenMessagesMs,
+  });
 
-  const { apiKey } = parsed.data;
-
-  try {
-    let sessionId = parsed.data.sessionId?.trim();
-
-    if (!sessionId) {
-      // Adopting the session saves the operator copying a UUID by hand, but
-      // only when there is no ambiguity about which one they meant.
-      const sessions = await new WhatsAppClient({ baseUrl, apiKey, sessionId: "" }).listSessions();
-      if (sessions.length === 0) {
-        return NextResponse.json(
-          {
-            error:
-              "The gateway has no WhatsApp sessions yet. Create one and link a number in OpenWA, then connect here.",
-          },
-          { status: 409 },
-        );
-      }
-      const ready = sessions.filter((s) => s.status === READY_STATUS);
-      const chosen = ready.length === 1 ? ready[0] : sessions.length === 1 ? sessions[0] : null;
-      if (!chosen) {
-        return NextResponse.json(
-          {
-            error: `The gateway has ${sessions.length} sessions. Enter the session ID you want to send from.`,
-            sessions: sessions.map((s) => ({ id: s.id, name: s.name, status: s.status })),
-          },
-          { status: 409 },
-        );
-      }
-      sessionId = chosen.id;
-    }
-
-    const session = await new WhatsAppClient({ baseUrl, apiKey, sessionId }).getSession();
-
-    /*
-     * The dial code arrives from the client, which already knows the store's
-     * currency from the analytics payload it is rendering.
-     *
-     * It is deliberately NOT inferred from a snapshot here. Doing that made
-     * connecting a gateway depend on the WooCommerce order history being
-     * cached, and on a cold cache the pull outlived the serverless request —
-     * so saving a WhatsApp connection failed for a reason that had nothing to
-     * do with WhatsApp.
-     */
-    const defaultDialCode = (parsed.data.defaultDialCode ?? "").replace(/\D/g, "");
-
-    const config: WhatsAppConfig = {
-      baseUrl,
-      apiKey,
-      sessionId,
-      sessionName: session.name,
-      phone: session.phone ?? undefined,
-      defaultDialCode,
-      delayBetweenMessagesMs: parsed.data.delayBetweenMessagesMs ?? DEFAULT_SEND_DELAY_MS,
-    };
-    await writeWhatsAppConfig(userId, config);
-
-    return NextResponse.json({
-      connected: true,
-      config: redactWhatsAppConfig(config),
-      session,
-      ready: isSessionSendable(session),
-      warning:
-        isSessionSendable(session)
-          ? null
-          : `The session is "${session.status}", not "ready". Link a number in OpenWA before sending.`,
-    });
-  } catch (err) {
-    if (err instanceof WhatsAppApiError) {
-      return NextResponse.json({ error: err.message }, { status: err.status === 0 ? 502 : err.status });
-    }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Could not verify the gateway." },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json({ saved: true, config: redactWhatsAppConfig(await readWhatsAppConfig(userId)) });
 }
 
+/**
+ * Unlinks the WhatsApp number: logs the device out of WhatsApp (it disappears
+ * from Linked devices on the phone) and deletes the session's local data.
+ */
 export async function DELETE(request: Request) {
   const resolved = await requireTenant(request);
   if (!resolved.ok) return resolved.response;
   const { userId } = resolved.value;
 
-  if (configuredByEnvironment()) {
-    return NextResponse.json(
-      {
-        error:
-          "The gateway is set by environment variables. Remove WHATSAPP_API_URL and WHATSAPP_API_KEY on the host to disconnect it.",
-      },
-      { status: 409 },
-    );
+  const config = await readWhatsAppConfig(userId);
+  if (config) {
+    try {
+      await new WhatsAppClient(config).logout();
+    } catch (err) {
+      if (!(err instanceof WhatsAppApiError) || err.status === 0) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : "Could not reach the WhatsApp engine." },
+          { status: 502 },
+        );
+      }
+    }
   }
 
   await clearWhatsAppConfig(userId);

@@ -1,19 +1,21 @@
-import { Activity } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrandName } from "@/components/brand-name";
 
-export const metadata: Metadata = { title: "Set a new password · PulseCommerce" };
+export const metadata: Metadata = { title: "Set a new password · Setups Works Growth" };
 
 export default function Page() {
   return (
     <main className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-16">
       <Link href="/" className="mb-8 flex items-center gap-2.5">
         <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Activity className="size-5" strokeWidth={2.5} />
+          <TrendingUp className="size-5" strokeWidth={2.5} />
         </span>
-        <span className="text-base font-semibold tracking-tight">PulseCommerce</span>
+        <BrandName />
       </Link>
 
       <Card className="w-full max-w-sm">
@@ -24,7 +26,9 @@ export default function Page() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ResetPasswordForm />
+          <Suspense fallback={null}>
+            <ResetPasswordForm />
+          </Suspense>
         </CardContent>
       </Card>
     </main>

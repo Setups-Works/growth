@@ -419,7 +419,7 @@ export function WhatsAppSendPanel({
     if (timer.current) clearTimeout(timer.current);
     const res = await fetch(`/api/whatsapp/broadcast/${progress.id}`, { method: "DELETE" });
     setProgress((await res.json()) as Progress);
-    toast.info("Broadcast stopped. Messages already handed to the gateway will still go out.");
+    toast.info("Broadcast stopped. Messages already queued may still go out.");
   };
 
   if (connected === false) {
@@ -431,12 +431,12 @@ export function WhatsAppSendPanel({
             Send on WhatsApp
           </CardTitle>
           <CardDescription className="text-xs">
-            No gateway is connected yet.
+            WhatsApp is not available on this server yet.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild size="sm" variant="outline">
-            <Link href="/settings">Connect a WhatsApp gateway</Link>
+            <Link href="/settings?section=whatsapp">Open WhatsApp settings</Link>
           </Button>
         </CardContent>
       </Card>
@@ -479,8 +479,8 @@ export function WhatsAppSendPanel({
             <TriangleAlert className="size-4" />
             <AlertTitle className="text-xs font-medium">Session is not ready</AlertTitle>
             <AlertDescription className="text-xs">
-              The gateway is connected but no number is linked, so nothing can be sent. Link one
-              in <Link href="/settings" className="underline">Settings</Link> — this notice clears
+              No WhatsApp number is linked, so nothing can be sent. Scan the QR in{" "}
+              <Link href="/settings?section=whatsapp" className="underline">Settings → WhatsApp</Link> — this notice clears
               by itself within a few seconds of the scan landing.
             </AlertDescription>
           </Alert>
@@ -755,7 +755,7 @@ export function WhatsAppSendPanel({
                       buy link appears as plain text. Leave this off and the link renders as a
                       tappable card instead — provided your product pages set an{" "}
                       <code>og:image</code> tag. WhatsApp does not offer tappable buttons to
-                      self-hosted gateways at all; those need the official Business API.
+                      linked devices at all; those need the official Business API.
                     </span>
                   </span>
                 </label>
@@ -772,7 +772,7 @@ export function WhatsAppSendPanel({
                     disabled={running}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    The gateway fetches this itself, so it has to be publicly reachable.
+                    WhatsApp fetches this from the server, so it has to be publicly reachable.
                   </p>
                 </div>
               ) : null}
@@ -950,7 +950,7 @@ export function WhatsAppSendPanel({
                   <TriangleAlert className="size-3.5" />
                 )}
                 {progress.handedOff.toLocaleString()} of {progress.total.toLocaleString()} handed to
-                the gateway
+                WhatsApp
                 {progress.status === "sending" ? ` · ${humanDuration(progress.estimatedMsRemaining)} left` : ""}
               </p>
               {running ? (
@@ -974,7 +974,7 @@ export function WhatsAppSendPanel({
               <p className="text-[11px] text-destructive">{progress.error}</p>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                The gateway paces sends itself. Leaving this page pauses the broadcast — anything
+                Sends are paced automatically. Leaving this page pauses the broadcast — anything
                 already handed over still goes out, and reopening resumes where it stopped.
               </p>
             )}

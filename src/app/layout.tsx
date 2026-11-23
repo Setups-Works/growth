@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "PulseCommerce — Advanced WooCommerce analytics",
-    template: "%s · PulseCommerce",
+    default: "Setups Works Growth — Advanced WooCommerce analytics",
+    template: "%s · Setups Works Growth",
   },
   description:
     "Business intelligence for WooCommerce: revenue trends, RFM customer segmentation, CLV, cohort retention, B2B accounts, product performance and scheduled report exports.",

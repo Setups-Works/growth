@@ -62,7 +62,7 @@ interface PersistedView {
  * context. It's read through an external store rather than restored in an
  * effect, so there is no flash of the default range on first paint.
  */
-const viewStore = createPersistedStore<PersistedView>("pulse.range", {
+const viewStore = createPersistedStore<PersistedView>("sw.range", {
   presetId: "30d",
   range: null,
   granularity: "auto",

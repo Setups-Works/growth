@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     const result = refresh
       ? await getAnalyticsCached(await loadSnapshot(store, { refresh: true }), analyticsOpts)
       : await getAnalyticsForVersion(
-          { storeUrl: store.url, fetchedAt: store.lastSyncAt ?? "" },
+          { storeUrl: store.url, fetchedAt: store.lastSyncAt ?? "", storeId: store.id },
           () => loadSnapshot(store),
           analyticsOpts,
         );
@@ -60,8 +60,8 @@ export async function GET(request: Request) {
      * client-side search/sort, not a bug to shrink). `no-store` meant every
      * dashboard reload re-downloaded the full thing even though the
      * underlying snapshot only changes on the ~10-minute sync cadence
-     * (AGENTS.md) — a real, measured contributor to exceeding Vercel's
-     * bandwidth quota. `private` keeps this out of any shared/CDN cache
+     * (docker/cron/crontab) — a real, measured contributor to excess
+     * bandwidth. `private` keeps this out of any shared/CDN cache
      * (tenant-scoped data must never be cross-served); 60s is well inside
      * the staleness the sync cadence already accepts elsewhere in this app,
      * and an explicit `?refresh=1` pull is itself an async re-sync, not

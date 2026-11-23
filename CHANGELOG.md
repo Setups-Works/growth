@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to PulseCommerce are recorded here.
+All notable changes to Setups Works Growth are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -17,7 +17,7 @@ A full rebuild of `/` as a thirteen-section marketing page, composed in
 |---|---------|------|---------|
 | 1 | Hero, with browser-framed product shot | `hero.tsx` | server |
 | 2 | Stack logo band | `trusted-by.tsx` | server |
-| 3 | Why PulseCommerce (bento) | `why-bento.tsx` | server |
+| 3 | Why Setups Works Growth (bento) | `why-bento.tsx` | server |
 | 4 | Thirteen analytics modules | `modules.tsx` | server |
 | 5 | AI commerce agent + pipeline | `ai-agent.tsx` | **client** |
 | 6 | Tabbed dashboard preview | `dashboard-preview.tsx` | **client** |

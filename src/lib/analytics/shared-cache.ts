@@ -80,13 +80,13 @@ export async function readShared(key: string): Promise<AnalyticsResult | null> {
   }
 }
 
-export async function writeShared(key: string, result: AnalyticsResult): Promise<void> {
+export async function writeShared(key: string, result: AnalyticsResult, storeId?: string): Promise<void> {
   if (!databaseConfigured()) return;
 
   try {
     const packed = gzipSync(Buffer.from(JSON.stringify(result)));
     await db()`
-      insert into analytics_cache (key, payload) values (${key}, ${packed})
+      insert into analytics_cache (key, store_id, payload) values (${key}, ${storeId ?? null}, ${packed})
       on conflict (key) do update set payload = excluded.payload, created_at = now()
     `;
   } catch {
@@ -104,6 +104,20 @@ export async function writeShared(key: string, result: AnalyticsResult): Promise
  * correctness: anything it removes was already unreachable, and anything it
  * misses is merely wasted space.
  */
+/**
+ * Drops a store's entries from before its latest sync. Every entry is keyed
+ * on the sync time, so once a new sync lands the older ones can never be read
+ * again — without this the table gains a row per store every sync cycle.
+ */
+export async function pruneStore(storeId: string, syncedAt: Date): Promise<void> {
+  if (!databaseConfigured()) return;
+  try {
+    await db()`delete from analytics_cache where store_id = ${storeId} and created_at < ${syncedAt}`;
+  } catch {
+    // Housekeeping only.
+  }
+}
+
 export async function sweepShared(olderThanDays = 7): Promise<number> {
   if (!databaseConfigured()) return 0;
   try {

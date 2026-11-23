@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAnalyticsForVersion } from "@/lib/analytics/cache";
 import { requireStore, requireWrite } from "@/lib/auth/tenant";
 import { db } from "@/lib/db/client";
+import { pruneStore } from "@/lib/analytics/shared-cache";
 import { forgetSnapshot, readSnapshot, syncStatus } from "@/lib/woo/mirror";
 import { syncStore } from "@/lib/woo/sync";
 
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       select last_sync_at from stores where id = ${store.id}
     `;
     await getAnalyticsForVersion(
-      { storeUrl: store.url, fetchedAt: freshLastSyncAt?.toISOString() ?? "" },
+      { storeUrl: store.url, fetchedAt: freshLastSyncAt?.toISOString() ?? "", storeId: store.id },
       () =>
         readSnapshot({
           id: store.id,
@@ -84,6 +85,8 @@ export async function POST(request: Request) {
           lastSyncAt: freshLastSyncAt?.toISOString() ?? null,
         }),
     ).catch(() => {});
+    // Cached results keyed on earlier syncs can never be read again.
+    if (freshLastSyncAt) await pruneStore(store.id, freshLastSyncAt);
 
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

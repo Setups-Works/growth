@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/auth/current-user";
 import { databaseConfigured } from "@/lib/db/client";
 import { activeStore } from "@/lib/auth/tenant";
 
@@ -9,13 +9,10 @@ export const dynamic = "force-dynamic";
 /**
  * Who the caller is, and how far through setup they are.
  *
- * Signing in and out happen in the browser against Supabase directly — that is
- * where the SDK manages tokens and their refresh, and duplicating it here
- * would mean two implementations of the same state, drifting.
- *
- * What the server is needed for is the part the browser cannot see: whether
- * this account has a store connected, and whether it has been synced. The
- * onboarding flow is driven off exactly that.
+ * Signing in and out happen through the sibling /api/auth/* routes. This one
+ * also answers the part the browser cannot see: whether this account has a
+ * store connected, and whether it has been synced. The onboarding flow is
+ * driven off exactly that.
  */
 export async function GET() {
   const user = await currentUser();

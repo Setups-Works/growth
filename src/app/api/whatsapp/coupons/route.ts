@@ -133,7 +133,7 @@ export async function POST(request: Request) {
       usage_limit_per_user: input.usageLimitPerUser,
       individual_use: true,
       ...(input.productIds?.length ? { product_ids: input.productIds } : {}),
-      description: "Created by PulseCommerce for a WhatsApp campaign",
+      description: "Created by Setups Works Growth for a WhatsApp campaign",
     });
 
     return NextResponse.json({ coupon }, { status: 201 });

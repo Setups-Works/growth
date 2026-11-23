@@ -25,7 +25,7 @@ import { ProductScreen } from "@/components/marketing/landing/product-screen";
 export const metadata: Metadata = {
   title: "Campaigns",
   description:
-    "Build an audience from your real analytics, personalise every message from that customer's own history, dry-run the list, and send on WhatsApp through a gateway you own.",
+    "Build an audience from your real analytics, personalise every message from that customer's own history, dry-run the list, and send on WhatsApp from your own linked number.",
   alternates: { canonical: "/features/campaigns" },
 };
 
@@ -149,7 +149,7 @@ export default function CampaignsPage() {
             aria-hidden
             className="overflow-hidden rounded-xl ring-1 ring-foreground/10 shadow-[0_16px_50px_-20px_rgb(0_0_0/0.3)]"
           >
-            <Safari url="app.pulsecommerce.io/campaigns" className="w-full">
+            <Safari url="growth.setups.works/campaigns" className="w-full">
               <ProductScreen view="customers" />
             </Safari>
           </div>

@@ -9,8 +9,7 @@ import type { PlanId } from "@/lib/billing/usage";
  * numbers on the site. These are the real, billed prices — see
  * src/lib/billing/usage.ts for how the message cap and the WhatsApp gate
  * (planIncludesWhatsApp) are enforced, and
- * supabase/migrations/20260828140000_billing.sql /
- * supabase/migrations/20260907120000_lite_plan.sql for the plan values these
+ * the `plan` check constraint in db/migrations/0001_baseline.sql for the values these
  * must stay in sync with (RAZORPAY_PLAN_ID_GO / _PLUS / _LITE).
  *
  * Go and Plus include every module — analytics, campaigns, flows, the

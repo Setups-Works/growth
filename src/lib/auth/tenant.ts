@@ -1,7 +1,7 @@
 import { db } from "@/lib/db/client";
-import { currentUser, type CurrentUser } from "@/lib/supabase/server";
+import { currentUser, type CurrentUser } from "./current-user";
 import { verifyApiKey, readPresentedKey, type Scope } from "./api-key";
-import { USER_EMAIL_HEADER, USER_ID_HEADER } from "./headers";
+import { SCOPES_HEADER, USER_EMAIL_HEADER, USER_ID_HEADER } from "./headers";
 
 /**
  * Who is making this request, and which store they may touch.
@@ -20,7 +20,7 @@ import { USER_EMAIL_HEADER, USER_ID_HEADER } from "./headers";
  *
  * ─── Two kinds of caller ───────────────────────────────────────────────────
  *
- * A browser carries a Supabase session cookie. A script carries an API key.
+ * A browser carries a signed session cookie. A script carries an API key.
  * Both resolve to the same thing: a user id, and the store that user has
  * active. The rest of the application does not need to know which it was.
  */
@@ -59,9 +59,8 @@ export interface TenantStore {
 export async function resolveTenant(request?: Request): Promise<Tenant | null> {
   /*
    * Proxy has already validated this request and written the caller into a
-   * header it strips from anything inbound. Trusting that is what avoids a
-   * second round trip to the Auth server on every API call — the single
-   * largest cost in a request that otherwise does one indexed query.
+   * header it strips from anything inbound. Trusting that avoids verifying
+   * the same caller twice on every API call.
    *
    * The header is only safe because Proxy runs on every matched path and
    * deletes any client-supplied copy. Nothing else may set it.
@@ -81,7 +80,7 @@ export async function resolveTenant(request?: Request): Promise<Tenant | null> {
 
   /*
    * No header: a server component, or a route Proxy does not match. Falls back
-   * to asking the Auth server directly.
+   * to verifying the session cookie directly.
    */
   const user = await currentUser();
   if (user) {
@@ -113,7 +112,7 @@ export async function resolveTenant(request?: Request): Promise<Tenant | null> {
  * key must not be mistaken for a session.
  */
 function readScopes(request?: Request): Scope[] | null {
-  const raw = request?.headers.get("x-pulse-scopes");
+  const raw = request?.headers.get(SCOPES_HEADER);
   if (!raw) return null;
   const scopes = raw.split(",").filter((s): s is Scope => s === "read" || s === "write");
   return scopes.length ? scopes : ["read"];
@@ -202,7 +201,7 @@ export async function requireTenant(request?: Request): Promise<Resolved<Tenant>
     return fail(
       {
         error: "Authentication required.",
-        hint: "Sign in, or send an API key as `Authorization: Bearer pc_live_…`.",
+        hint: "Sign in, or send an API key as `Authorization: Bearer sw_live_…`.",
       },
       401,
     );

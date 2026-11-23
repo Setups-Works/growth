@@ -1,13 +1,12 @@
 import type { WhatsAppConfig } from "./config";
 
 /**
- * Client for a self-hosted OpenWA gateway.
+ * Client for the bundled WhatsApp engine (whatsapp/src/server.mjs).
  *
- * Only the endpoints this app actually uses are modelled, and each shape below
- * was checked against a live 0.12.2 instance rather than inferred from the
- * schema — the two disagree in places. Most usefully: a session's connection
- * state lives on GET /api/sessions/{id}, not on /status, which is the WhatsApp
- * Stories API and returns {"statuses":[]} whatever the session is doing.
+ * The engine holds one linked-device session per account (session id = user
+ * id) and is reachable only on the private Docker network, authenticated with
+ * WHATSAPP_ENGINE_KEY. Its endpoint shapes are documented at the top of
+ * whatsapp/src/server.mjs; change both sides together.
  */
 
 export class WhatsAppApiError extends Error {
@@ -35,7 +34,7 @@ export interface WhatsAppSession {
   engineLoaded: boolean;
 }
 
-/** A conversation, as listed by the gateway. */
+/** A conversation, as listed by the engine. */
 export interface WhatsAppChat {
   id: string;
   name: string | null;
@@ -80,7 +79,7 @@ export interface BulkMessageItem {
 }
 
 export interface BulkOptions {
-  /** OpenWA enforces a 1000ms floor. */
+  /** The engine enforces a 1000ms floor. */
   delayBetweenMessages?: number;
   /** Adds 0-2s of jitter so sends do not land on a metronome. */
   randomizeDelay?: boolean;
@@ -99,10 +98,10 @@ export interface BulkAccepted {
 export const READY_STATUS = "ready";
 
 /**
- * Whether the gateway can actually deliver a message right now.
+ * Whether the engine can actually deliver a message right now.
  *
  * `status` is a persisted database value and `engineLoaded` is the live one,
- * and they disagree after the gateway process restarts: the row still says
+ * and they disagree after the engine process restarts: the row still says
  * "ready" while the in-memory engine is gone. A send in that state fails with
  * "Session is not active. Start the session first." for every recipient, so
  * both signals have to agree before anything is dispatched.
@@ -149,8 +148,8 @@ export class WhatsAppClient {
       const aborted = error instanceof Error && error.name === "AbortError";
       throw new WhatsAppApiError(
         aborted
-          ? "The WhatsApp gateway did not respond in time."
-          : `Could not reach the WhatsApp gateway at ${this.baseUrl}.`,
+          ? "The WhatsApp engine did not respond in time."
+          : "Could not reach the WhatsApp engine. Check that the `whatsapp` service is running.",
         0,
         path,
       );
@@ -163,7 +162,7 @@ export class WhatsAppClient {
     try {
       payload = text ? JSON.parse(text) : null;
     } catch {
-      // A non-JSON body means something other than the gateway answered —
+      // A non-JSON body means something other than the engine answered —
       // a proxy error page, most likely. Keep the text for the message.
     }
 
@@ -187,7 +186,7 @@ export class WhatsAppClient {
     );
   }
 
-  /** Stored messages for one conversation, oldest last as the gateway returns them. */
+  /** Stored messages for one conversation, oldest last as the engine returns them. */
   async getMessages(chatId: string, limit = 50): Promise<WhatsAppMessage[]> {
     const body = await this.request<{ messages?: WhatsAppMessage[] }>(
       `/api/sessions/${this.sessionId}/messages?chatId=${encodeURIComponent(chatId)}&limit=${limit}`,
@@ -200,7 +199,7 @@ export class WhatsAppClient {
     return this.request<WhatsAppSession[]>("/api/sessions");
   }
 
-  /** Boots the engine. Rejects with 400 if the session is already running. */
+  /** Boots this account's session; idempotent. */
   startSession(): Promise<WhatsAppSession> {
     return this.request<WhatsAppSession>(`/api/sessions/${this.sessionId}/start`, {
       method: "POST",
@@ -230,7 +229,7 @@ export class WhatsAppClient {
   /**
    * The pairing QR as a data URL, while one is being offered.
    *
-   * The gateway answers 400 once a session is already authenticated, which is
+   * The engine answers 400 once a session is already authenticated, which is
    * a normal outcome here rather than a failure, so it is reported as "no QR"
    * instead of thrown.
    */
@@ -252,7 +251,7 @@ export class WhatsAppClient {
    * Returns a session that can actually send, restarting the engine if that is
    * all that is wrong.
    *
-   * When a gateway's process restarts, the session row survives saying "ready"
+   * When the engine process restarts, the session row survives saying "ready"
    * while the in-memory engine does not — and every send then fails with
    * "Session is not active". The pairing credentials are on disk, though, so
    * starting the engine reconnects the same number in a few seconds with no QR
@@ -299,6 +298,11 @@ export class WhatsAppClient {
     return session;
   }
 
+  /** Unlinks the device from WhatsApp and deletes the session's local data. */
+  logout(): Promise<unknown> {
+    return this.request(`/api/sessions/${this.sessionId}/logout`, { method: "POST", timeoutMs: 30_000 });
+  }
+
   /**
    * Whether a number is registered on WhatsApp, and its canonical chat id.
    * Worth doing before a broadcast: sending to numbers that were never on
@@ -335,7 +339,7 @@ export class WhatsAppClient {
   }
 
   /**
-   * Hands a batch to OpenWA, which then works through it on its own schedule
+   * Hands a batch to the engine, which then works through it on its own schedule
    * using the pacing below. It returns as soon as the batch is accepted, so the
    * caller polls getBatch rather than waiting.
    */
@@ -365,8 +369,7 @@ export class WhatsAppClient {
   }
 
   // --- Plugins -------------------------------------------------------------
-  // Gateway-wide rather than per-session: a plugin is installed on the gateway
-  // and its configuration is read and written by id, not by conversation.
+  // Per session: each account has its own menu bot configuration.
 
   getPlugin(id: string): Promise<{
     id: string;
@@ -374,11 +377,11 @@ export class WhatsAppClient {
     version?: string;
     config?: Record<string, unknown>;
   }> {
-    return this.request(`/api/plugins/${encodeURIComponent(id)}`);
+    return this.request(`/api/sessions/${this.sessionId}/plugins/${encodeURIComponent(id)}`);
   }
 
   setPluginConfig(id: string, config: unknown): Promise<unknown> {
-    return this.request(`/api/plugins/${encodeURIComponent(id)}/config`, {
+    return this.request(`/api/sessions/${this.sessionId}/plugins/${encodeURIComponent(id)}/config`, {
       method: "PUT",
       body: { config },
     });
@@ -387,7 +390,7 @@ export class WhatsAppClient {
   /** `enabled` false disables it. Installed plugins are inert until enabled. */
   setPluginEnabled(id: string, enabled: boolean): Promise<unknown> {
     return this.request(
-      `/api/plugins/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`,
+      `/api/sessions/${this.sessionId}/plugins/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`,
       { method: "POST" },
     );
   }
@@ -401,14 +404,14 @@ function describeError(payload: unknown, raw: string, status: number): string {
       // These two are worth translating: they are the failures an operator
       // actually hits, and the raw text does not say what to do about them.
       if (status === 401) {
-        return `${message}. Check the API key in Settings — a key is only valid for the gateway that issued it.`;
+        return `${message}. WHATSAPP_ENGINE_KEY differs between the app and the whatsapp service.`;
       }
       return message;
     }
     if (typeof body.error === "string" && body.error) return body.error;
   }
   if (status === 404) {
-    return "Not found on the gateway. The session may have been deleted, or the URL points at something other than OpenWA.";
+    return "Not found on the WhatsApp engine.";
   }
-  return raw.slice(0, 200) || `The gateway returned HTTP ${status}.`;
+  return raw.slice(0, 200) || `The WhatsApp engine returned HTTP ${status}.`;
 }

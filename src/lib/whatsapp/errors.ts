@@ -9,7 +9,7 @@
 export class GatewayNotConnectedError extends Error {
   readonly code = "gateway_not_connected";
 
-  constructor(message = "No WhatsApp gateway is connected. Add one in Settings first.") {
+  constructor(message = "WhatsApp is not available. Link a number in Settings → WhatsApp first.") {
     super(message);
     this.name = "GatewayNotConnectedError";
   }

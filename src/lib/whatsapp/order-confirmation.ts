@@ -143,7 +143,7 @@ export async function sendOrderConfirmation(
   }
 
   const config = await readWhatsAppConfig(store.user_id);
-  if (!config) return { status: "skipped", reason: "No WhatsApp gateway is connected." };
+  if (!config) return { status: "skipped", reason: "WhatsApp is not enabled on this server." };
 
   const normalised = normalisePhone(order.billing?.phone, {
     defaultDialCode: config.defaultDialCode,

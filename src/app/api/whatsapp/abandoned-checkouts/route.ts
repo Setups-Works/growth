@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  *
  * The actual recovery work happens on a schedule — see
  * src/app/api/cron/abandoned-checkouts/route.ts, ticked every five minutes
- * by Supabase's scheduler. This route only reads and flips the switch.
+ * by the scheduler (docker/cron/crontab). This route only reads and flips the switch.
  *
  * No phone number is returned here, matching the rest of this API: a row
  * says what happened to an order, not who it happened to.

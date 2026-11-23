@@ -20,8 +20,8 @@ import { defineConfig, devices } from "@playwright/test";
  * deployment must never look like "no auth required" (see the comment there).
  * So reaching the *actual* thing this suite tests — what a real, signed-in
  * tenant with no store sees — needs a real identity, seeded once per CI run
- * by scripts/seed-ci-test-identity.mjs against a dedicated test Supabase
- * project. CI_TEST_API_KEY is that identity's key; unset locally, so a
+ * by scripts/seed-test-identity.mjs into a throwaway PostgreSQL service.
+ * CI_TEST_API_KEY is that identity's key; unset locally, so a
  * developer running this without CI's secrets gets the true "nothing
  * configured" 503 state instead, which is a valid thing to have tested too.
  */
@@ -74,25 +74,14 @@ export default defineConfig({
         env: {
           // No store, no gateway, no password: the fresh-clone state.
           //
-          // These are blanked deliberately. Next loads .env.local at startup,
-          // and a developer's real Redis credentials there would connect the
-          // test run to a live store — which is both a false pass and a way to
-          // exercise a real WooCommerce account from a test suite. dotenv does
-          // not overwrite a key already present in the environment, so setting
-          // them empty here wins.
           NODE_ENV: "production",
-          KV_REST_API_URL: "",
-          KV_REST_API_TOKEN: "",
-          UPSTASH_REDIS_REST_URL: "",
-          UPSTASH_REDIS_REST_TOKEN: "",
           // Same reasoning for the assistant: a real key here would spend the
           // developer's Groq credit on every test run and, worse, make the
           // "unavailable without a key" test pass or fail depending on whose
           // machine it ran on.
           GROQ_API_KEY: "",
-          WHATSAPP_API_URL: "",
-          WHATSAPP_API_KEY: "",
-          APP_PASSWORD: "",
+          WHATSAPP_ENGINE_URL: "",
+          WHATSAPP_ENGINE_KEY: "",
         },
       },
 });

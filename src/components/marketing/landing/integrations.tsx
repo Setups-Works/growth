@@ -36,7 +36,7 @@ export function Integrations() {
             Nothing to migrate. One store to connect.
           </h2>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-            PulseCommerce reads what you already have. Your catalogue stays where it is, your
+            Setups Works Growth reads what you already have. Your catalogue stays where it is, your
             checkout stays where it is, and your customers never see a change.
           </p>
 

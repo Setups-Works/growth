@@ -93,7 +93,7 @@ export default function FeaturesPage() {
         accent="your own orders."
         body="There is no sample data anywhere in the product. Connect a store and every figure below is derived from one cached snapshot of your real order history."
         secondary={{ label: "See pricing", href: "/pricing" }}
-        aside={<ScreenFrame view="overview" url="app.pulsecommerce.io/dashboard" beam />}
+        aside={<ScreenFrame view="overview" url="growth.setups.works/dashboard" beam />}
       />
 
       {/* ---- Analyse ------------------------------------------------------- */}
@@ -116,7 +116,7 @@ export default function FeaturesPage() {
             "Every customer listed, not a capped slice",
           ]}
         >
-          <ScreenFrame view="customers" url="app.pulsecommerce.io/customers" />
+          <ScreenFrame view="customers" url="growth.setups.works/customers" />
         </FeatureRow>
 
         <FeatureRow
@@ -132,7 +132,7 @@ export default function FeaturesPage() {
             "Cohort retention plotted month by month",
           ]}
         >
-          <ScreenFrame view="retention" url="app.pulsecommerce.io/cohorts" />
+          <ScreenFrame view="retention" url="growth.setups.works/cohorts" />
         </FeatureRow>
 
         <FeatureRow
@@ -147,7 +147,7 @@ export default function FeaturesPage() {
             "The revenue at risk behind each shortage",
           ]}
         >
-          <ScreenFrame view="forecast" url="app.pulsecommerce.io/inventory" />
+          <ScreenFrame view="forecast" url="growth.setups.works/inventory" />
         </FeatureRow>
       </Section>
 
@@ -202,7 +202,7 @@ export default function FeaturesPage() {
           title="It proposes. You approve."
           body="Ask about the business in plain English. It reads your figures, drafts the message, and then stops — nothing is sent until you approve the card in front of you."
           points={[
-            "Reads revenue, segments, stock, flows and the gateway",
+            "Reads revenue, segments, stock, flows and WhatsApp status",
             "No tool for messaging your whole customer base",
             "Phone numbers are absent from everything it can read",
             "Approving runs the same guarded route a person would use",

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   const config = await readWhatsAppConfig(userId);
   if (!config) {
     return NextResponse.json(
-      { error: "No WhatsApp gateway is connected. Add one in Settings first." },
+      { error: "WhatsApp is not available. Link a number in Settings → WhatsApp first." },
       { status: 409 },
     );
   }

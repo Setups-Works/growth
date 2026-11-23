@@ -1,22 +1,19 @@
 /**
- * Signed session cookie.
+ * Signed session cookie — the whole of browser authentication.
  *
- * Uses Web Crypto rather than `node:crypto` so the same verify path runs in
- * middleware (Edge runtime) and in route handlers (Node) without a second
- * implementation drifting out of sync.
+ * A session is `<base64url payload>.<base64url HMAC-SHA256>`, signed with
+ * AUTH_SECRET. There is no session table: verifying one is a single HMAC, so
+ * Proxy can check every request without a database round trip.
+ *
+ * Uses Web Crypto rather than `node:crypto` so the same code runs anywhere.
  */
 
-export const SESSION_COOKIE = "pulse_session";
+export const SESSION_COOKIE = "sw_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface SessionPayload {
-  /** How the session was established. */
-  via: "woo-auth" | "password";
-  /** Store the session is scoped to, when known. */
-  storeUrl?: string;
-  /** Account the session belongs to. Absent on a legacy APP_PASSWORD session. */
-  userId?: string;
-  email?: string;
+  userId: string;
+  email: string;
   issuedAt: number;
   expiresAt: number;
 }
@@ -26,18 +23,13 @@ function secret(): string {
   if (value && value.length >= 16) return value;
   // A weak fallback would silently make sessions forgeable, so refuse instead.
   throw new Error(
-    "AUTH_SECRET is not set (or is shorter than 16 characters). Generate one with `openssl rand -hex 32` and add it to .env.local.",
+    "AUTH_SECRET is not set (or is shorter than 16 characters). Generate one with `openssl rand -hex 32`.",
   );
 }
 
-/** True when the deployment has auth configured at all. */
+/** True when the deployment can issue sessions at all. */
 export function authConfigured(): boolean {
   return Boolean(process.env.AUTH_SECRET && process.env.AUTH_SECRET.length >= 16);
-}
-
-/** True when a password login is available. */
-export function passwordConfigured(): boolean {
-  return Boolean(process.env.APP_PASSWORD);
 }
 
 function base64url(bytes: Uint8Array<ArrayBuffer>): string {
@@ -51,7 +43,6 @@ function fromBase64url(value: string): ArrayBuffer {
   const binary = atob(padded);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  // Returning the buffer keeps this assignable to BufferSource on every runtime.
   return bytes.buffer;
 }
 
@@ -65,7 +56,7 @@ async function key(): Promise<CryptoKey> {
   );
 }
 
-export async function createSession(payload: Omit<SessionPayload, "issuedAt" | "expiresAt">): Promise<string> {
+export async function createSession(payload: { userId: string; email: string }): Promise<string> {
   const now = Date.now();
   const full: SessionPayload = { ...payload, issuedAt: now, expiresAt: now + SESSION_TTL_MS };
   const body = base64url(new TextEncoder().encode(JSON.stringify(full)));
@@ -74,7 +65,7 @@ export async function createSession(payload: Omit<SessionPayload, "issuedAt" | "
 }
 
 export async function verifySession(token: string | undefined): Promise<SessionPayload | null> {
-  if (!token) return null;
+  if (!token || !authConfigured()) return null;
   const [body, signature] = token.split(".");
   if (!body || !signature) return null;
 
@@ -88,26 +79,23 @@ export async function verifySession(token: string | undefined): Promise<SessionP
     if (!valid) return null;
 
     const payload = JSON.parse(new TextDecoder().decode(new Uint8Array(fromBase64url(body)))) as SessionPayload;
-    if (typeof payload.expiresAt !== "number" || payload.expiresAt < Date.now()) return null;
+    if (typeof payload.userId !== "string" || typeof payload.expiresAt !== "number") return null;
+    if (payload.expiresAt < Date.now()) return null;
     return payload;
   } catch {
     return null;
   }
 }
 
+/*
+ * `secure` follows APP_URL rather than NODE_ENV: a Docker container is always
+ * NODE_ENV=production, but may legitimately be reached over plain HTTP on a
+ * private network or localhost, where a Secure cookie would be dropped.
+ */
 export const SESSION_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: "lax" as const,
   path: "/",
   maxAge: SESSION_TTL_MS / 1000,
-  // Set on HTTPS deployments; a plain-HTTP localhost dev server would drop it.
-  secure: process.env.NODE_ENV === "production",
+  secure: (process.env.APP_URL ?? "").startsWith("https://"),
 };
-
-/** Constant-time string compare, so a password check can't be timed. */
-export function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}

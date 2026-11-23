@@ -4,7 +4,7 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# PulseCommerce — orientation for AI agents
+# Setups Works Growth — orientation for AI agents
 
 `README.md` is the full reference (architecture diagrams, every pipeline, every
 feature, deployment, troubleshooting) — read it before touching a subsystem you
@@ -14,28 +14,33 @@ code alone won't surface fast enough: real gotchas from real incidents in this
 codebase, and the one or two facts that quietly invalidate an otherwise
 reasonable assumption a fresh agent would make.
 
-## Scheduling runs on Supabase, not Vercel
+## Everything runs in Docker — there is no Supabase and no Vercel
 
-Nothing in this project runs on Vercel Cron — there is no `crons` block in
-`vercel.json`, and `npx vercel cron ls` returns nothing. The three scheduled
-jobs (`sync-stores` every 10 min, `advance-flows` daily at 04:30 UTC,
-`abandoned-checkouts` every 5 min) are **Supabase pg_cron + pg_net**, defined
-in `supabase/migrations/*cron*.sql` and visible with
-`select * from cron.job;` against the database — not in any file in this repo.
-A `trigger_app_job(path)` SQL function reads the app's base URL and
-`CRON_SECRET` from Supabase Vault and POSTs to the app directly from Postgres.
+The stack is `docker-compose.yml`: `app` (Next.js standalone), `db`
+(PostgreSQL 17), `cron` (BusyBox crond) and an optional `caddy` for HTTPS.
+This project used to run on Supabase (Auth, pg_cron, Vault) and Vercel; all of
+that is gone. If you find a comment, doc or habit that assumes Supabase Auth,
+`auth.users`, `auth.uid()`, RLS policies, pg_cron, `supabase/migrations`,
+Vercel Cron, Redis/KV or serverless cold starts, it is stale — fix it rather
+than following it.
 
-This was itself a real, long-standing documentation bug: `README.md` claimed
-"Vercel Cron" in three places until this was caught by actually checking
-(`npx vercel cron ls`), not by reading the docs. If you're touching a
-`/api/cron/*` route or its trigger cadence, the migration file is the source
-of truth — grep `supabase/migrations/` for `cron.schedule`, don't trust prose.
+**Scheduling** lives in `docker/cron/crontab`: `/api/cron/sync` every 10 min,
+`/api/cron/flows` daily at 04:30 UTC, `/api/cron/abandoned-checkouts` every 5
+min, each POSTed with `CRON_SECRET` as a bearer token over the private Docker
+network. That file is the source of truth for cadence — grep it, don't trust
+prose. A new scheduled route copies the existing constant-time `CRON_SECRET`
+check verbatim, goes in `PUBLIC_API` in `src/proxy.ts`, and gets a crontab line.
+
+**Auth** is the app's own: `users` table, scrypt hashes
+(`src/lib/auth/password.ts`), an HMAC-signed `sw_session` cookie
+(`src/lib/auth/session.ts`), and the `/api/auth/*` routes. Password-reset
+tokens are stored as SHA-256 digests only. Keep that digest-only discipline.
 
 ## The tenant-scoping chokepoint
 
-The server reaches Postgres as the table owner over the transaction pooler,
-which bypasses row-level security — so RLS is not what keeps one tenant from
-reading another's data. `src/lib/auth/tenant.ts` is what does: every request
+The server reaches Postgres as the table owner and there are no row-level
+security policies — so nothing in the database keeps one tenant from reading
+another's data. `src/lib/auth/tenant.ts` is what does: every request
 handler resolves a `Tenant`/`TenantStore` through `resolveTenant` /
 `requireTenant` / `requireStore` / `activeStore` and scopes its own queries by
 the returned `storeId`/`userId`. A handler that queries a tenant-owned table
@@ -46,7 +51,7 @@ the one file where a shortcut is a cross-tenant data leak, not a style issue.
 
 `whatsapp_config` (single-tenant) was dropped and replaced by
 `whatsapp_connections` (per-user) in the multi-tenant migration
-(`20260811140000_multi_tenant.sql`), but `src/lib/whatsapp/config.ts` kept
+but `src/lib/whatsapp/config.ts` kept
 querying the old table for a long time afterward — every WhatsApp-touching
 route silently broke ("Cannot POST /api/sessions//start") except the one route
 that happened to do its own inline session lookup. The fix was threading
@@ -56,15 +61,15 @@ If you add a new per-tenant config table, check every reader takes a
 tenant/user id as a real parameter — a config helper with no id parameter in a
 multi-tenant app is a bug waiting to surface exactly like this one did.
 
-## Applying a migration in a sandboxed / agent environment
+## Database migrations
 
-The `supabase` CLI needs a direct (usually IPv6) connection to the database,
-which is commonly blocked on a sandboxed network. When it can't reach the DB,
-apply a migration with a throwaway Node script using the `postgres` npm
-package and `SUPABASE_DB_POOL_URL` (or the pooler connection string) from
-`.env.local` — write it to something like `.tmp-migration.mjs`, run it, then
-`rm -f` it in the same command chain. Don't leave the script committed or
-lying around; it typically embeds a connection string.
+Schema changes are plain SQL files in `db/migrations/`, applied in filename
+order by `scripts/migrate.mjs` (each once, in a transaction, under an advisory
+lock) — automatically when the `app` container starts, or by hand with
+`DATABASE_URL=... npm run db:migrate`. `0001_baseline.sql` is the consolidated
+end state of the old Supabase migration history; never edit an applied file —
+add `0002_*.sql`. There is no RLS: the app connects as the table owner, so
+tenant isolation is entirely `src/lib/auth/tenant.ts` (below).
 
 ## Safety rules for anything that can message a real phone
 
@@ -90,7 +95,7 @@ lying around; it typically embeds a connection string.
 
 ## Jira workflow for AI agents
 
-Work is tracked on the PulseCommerce Jira board
+Work is tracked on the Setups Works Growth Jira board
 (`setups-works.atlassian.net/jira/software/projects/PUL/boards/2`), not in
 GitHub Issues. An issue that's ready for an agent to pick up carries an
 **"Agent prompt" comment** — self-contained context, real file pointers, and
@@ -155,24 +160,25 @@ backfilled in a batch later.
 - `src/lib/openapi.ts` — the hand-written OpenAPI 3.1 spec. CI
   (`scripts/check-openapi.mjs`) fails if a route exists that this doesn't
   describe; add new routes here in the same commit that adds them.
-- `src/lib/auth/tenant.ts`, `src/lib/auth/api-key.ts`,
-  `src/lib/auth/cli-login.ts`, `src/lib/auth/pending.ts` — the whole auth
-  surface. Small on purpose; match the existing digest-only /
-  signed-token-only discipline rather than inventing a new pattern.
-- `packages/sdk` / `packages/cli` — published to npm as `pulsecommerce-sdk` /
-  `pulsecommerce-cli`. The CLI is built on the SDK, not its own fetch calls.
-  Publishing is the user's own `npm publish`, from their own machine — not
-  something to attempt from an agent session.
+- `src/lib/auth/` — `tenant.ts`, `session.ts`, `password.ts`,
+  `current-user.ts`, `api-key.ts`, `pending.ts`: the whole auth surface.
+  Small on purpose; match the existing digest-only / signed-token-only
+  discipline rather than inventing a new pattern.
+- `docker-compose.yml`, `Dockerfile`, `docker/` — how it runs.
+- `db/migrations/` — the schema.
 
-## The WhatsApp gateway is a specific fork, not upstream OpenWA
+## WhatsApp is the bundled engine in `whatsapp/`, not an external gateway
 
-Every WhatsApp send in this app goes through a self-hosted gateway at
-**https://github.com/rmyndharis/OpenWA** — that repo is the source of truth
-for its endpoints, plugins, and response shapes, not the upstream OpenWA
-project or its general documentation. This fork's actual behavior has
-already been found to disagree with documented behavior in at least one
-place that matters (session state lives on `GET /api/sessions/{id}`, not
-`/status`). Adding a new WhatsApp-facing feature — a new gateway call, a new
-plugin integration, anything in `src/lib/whatsapp/client.ts` — means reading
-that repo's source first, not inferring from OpenWA docs in general. See
-`src/lib/whatsapp/CLAUDE.md` for more.
+There is no OpenWA or other third-party gateway any more. The `whatsapp`
+service (`whatsapp/src/`, Node + Baileys) holds one linked-device session per
+account — session id = user id — that the account owner links by scanning a QR
+in Settings → WhatsApp. It is reachable only on the Docker network with
+`WHATSAPP_ENGINE_KEY`. Its HTTP API is documented at the top of
+`whatsapp/src/server.mjs` and consumed by `src/lib/whatsapp/client.ts`: change
+both sides together. The menu bot (`chat-flow`) runs inside the engine
+(`whatsapp/src/menu-bot.mjs`); the inbox reads the engine's `wa_messages`
+table. Pairing credentials live on the `wa-data` volume, never in Postgres.
+
+Billing gates (Lite plan, message caps) apply only when Razorpay is configured
+(`billingEnforced()` in `src/lib/billing/usage.ts`); a self-hosted server
+without Razorpay gives every account every feature.

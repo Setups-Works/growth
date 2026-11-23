@@ -75,7 +75,7 @@ export const AUTH_MESSAGES: Record<string, { title: string; detail: string; tone
   no_storage: {
     title: "This deployment cannot save a connection",
     detail:
-      "Serverless platforms have a read-only filesystem, so the issued key would arrive and immediately vanish. Add a Redis store and set KV_REST_API_URL and KV_REST_API_TOKEN (Vercel KV and Upstash both provide these), then redeploy.",
+      "The issued key has nowhere to be saved. Set DATABASE_URL to a reachable PostgreSQL database and restart the app.",
     tone: "bad",
   },
 };

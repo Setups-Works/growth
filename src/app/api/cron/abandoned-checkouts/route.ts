@@ -19,14 +19,12 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /**
  * Recovers checkouts left pending, over WhatsApp.
  *
- * Called by Supabase's scheduler every five minutes (see the `abandoned-
- * checkouts` cron.job in supabase/migrations/20260828124357_abandoned_
- * checkouts.sql) — the same CRON_SECRET mechanism as sync-stores and
- * advance-flows, just far more often, because a 30-minute window is far
- * tighter than either of those need.
+ * Called by the `cron` service (docker/cron/crontab) every five minutes —
+ * the same CRON_SECRET mechanism as sync and flows, just far more often,
+ * because a 30-minute window is far tighter than either of those need.
  *
- * Reads WooCommerce live, not the mirror: the regular sync runs every two
- * hours, which is far too infrequent for this, and every-five-minutes syncs
+ * Reads WooCommerce live, not the mirror: the regular sync runs every ten
+ * minutes, which is still too coarse for this, and every-five-minutes syncs
  * for every tenant would be real load on stores that never asked for this
  * feature. Only stores with abandoned_checkout_enabled make this call at all.
  */
@@ -155,7 +153,7 @@ async function checkStore(store: StoreRow) {
 
   for (const order of candidates) {
     if (!config || !client) {
-      await recordSkip(store.user_id, order.id, "No WhatsApp gateway is connected.");
+      await recordSkip(store.user_id, order.id, "WhatsApp is not enabled on this server.");
       skipped += 1;
       continue;
     }

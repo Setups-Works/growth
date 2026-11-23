@@ -33,7 +33,7 @@ const STAGES = [
   },
   {
     key: "platform",
-    label: "PulseCommerce",
+    label: "Setups Works Growth",
     note: "One cached snapshot",
     owner: "Yours",
     render: () => <Database className="size-6 text-primary" strokeWidth={1.75} />,

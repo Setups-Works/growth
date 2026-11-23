@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useSignedIn } from "@/lib/supabase/use-session";
+import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { useEffect, useState } from "react";
 import {
-  Activity,
+  TrendingUp,
   ArrowRight,
   BarChart3,
   Bot,
@@ -17,7 +17,6 @@ import {
   Menu,
   MessageCircle,
   Sparkles,
-  Terminal,
   Users,
   Workflow,
 } from "lucide-react";
@@ -36,6 +35,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { BrandMark, BRANDS } from "@/components/marketing/brand-mark";
 import { cn } from "@/lib/utils";
+import { BrandName } from "@/components/brand-name";
 
 /**
  * The marketing header.
@@ -161,12 +161,6 @@ const MENU: { label: string; blurb: string; items: MenuItem[] }[] = [
         description: "OpenAPI schema, browsable",
         icon: Code2,
       },
-      {
-        label: "Developer platform",
-        href: "/developers",
-        description: "API, CLI and how they fit together",
-        icon: Terminal,
-      },
     ],
   },
 ];
@@ -174,7 +168,7 @@ const MENU: { label: string; blurb: string; items: MenuItem[] }[] = [
 const LINKS: [string, string][] = [
   ["Features", "/features"],
   ["Integrations", "/integrations"],
-  ["Docs", "/docs"],
+  ["API", "/api-docs"],
   ["Pricing", "/pricing"],
 ];
 
@@ -218,9 +212,9 @@ export function SiteHeader() {
       <div className="relative mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-2.5">
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Activity className="size-4.5" strokeWidth={2.5} />
+            <TrendingUp className="size-4.5" strokeWidth={2.5} />
           </span>
-          <span className="text-base font-semibold tracking-tight">PulseCommerce</span>
+          <BrandName />
         </Link>
 
         {/* ---- Desktop: the mega menu ------------------------------------- */}
@@ -365,9 +359,9 @@ export function SiteHeader() {
               <SheetHeader className="shrink-0 border-b px-4 py-3.5">
                 <SheetTitle className="flex items-center gap-2.5 text-base">
                   <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                    <Activity className="size-4" strokeWidth={2.5} />
+                    <TrendingUp className="size-4" strokeWidth={2.5} />
                   </span>
-                  PulseCommerce
+                  <BrandName />
                 </SheetTitle>
               </SheetHeader>
 

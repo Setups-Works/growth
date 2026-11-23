@@ -64,7 +64,7 @@ export async function GET(request: Request) {
   }
 
   const authorize = new URL(`${storeUrl}/wc-auth/v1/authorize`);
-  authorize.searchParams.set("app_name", "PulseCommerce Analytics");
+  authorize.searchParams.set("app_name", "Setups Works Growth Analytics");
   /*
    * read_write, for one reason only: creating discount coupons for WhatsApp
    * campaigns. WooCommerce has no finer-grained scope than "read" or

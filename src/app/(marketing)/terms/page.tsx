@@ -3,7 +3,7 @@ import { Section } from "@/components/marketing/sections";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "The terms that apply to using PulseCommerce.",
+  description: "The terms that apply to using Setups Works Growth.",
   alternates: { canonical: "/terms" },
 };
 
@@ -28,14 +28,14 @@ export default function TermsPage() {
         <div className="mt-10 space-y-10 text-base leading-relaxed text-muted-foreground">
           <LegalSection title="1. Who this agreement is with">
             <p>
-              PulseCommerce is operated by Setups Works (Udyam Registration UDYAM-TN-24-0086773).
+              Setups Works Growth is operated by Setups Works (Udyam Registration UDYAM-TN-24-0086773).
               By creating an account or connecting a store, you agree to these terms.
             </p>
           </LegalSection>
 
           <LegalSection title="2. The service">
             <p>
-              PulseCommerce connects to your WooCommerce store and your WhatsApp Business
+              Setups Works Growth connects to your WooCommerce store and your WhatsApp Business
               connection to provide analytics, campaign, and automated-messaging features. You
               control which store and which WhatsApp connection are linked, and can disconnect
               either at any time from Settings.
@@ -45,7 +45,7 @@ export default function TermsPage() {
           <LegalSection title="3. Your account and your responsibilities">
             <p>
               You&apos;re responsible for the accuracy of the WooCommerce and WhatsApp credentials
-              you provide, and for how PulseCommerce is used under your account — including
+              you provide, and for how Setups Works Growth is used under your account — including
               obtaining any consent required before messaging a customer, and complying with
               WhatsApp&apos;s own terms and India&apos;s applicable messaging/spam regulations.
             </p>
@@ -53,7 +53,7 @@ export default function TermsPage() {
               Sending unsolicited bulk messages to recipients who haven&apos;t consented to hear
               from your store is not permitted, and may result in your account or your connected
               WhatsApp number being restricted by WhatsApp itself, independent of anything
-              PulseCommerce does.
+              Setups Works Growth does.
             </p>
           </LegalSection>
 
@@ -80,7 +80,7 @@ export default function TermsPage() {
 
           <LegalSection title="6. Limitation of liability">
             <p>
-              PulseCommerce is provided as-is. To the extent permitted by law, Setups Works isn&apos;t
+              Setups Works Growth is provided as-is. To the extent permitted by law, Setups Works isn&apos;t
               liable for indirect or consequential damages arising from use of the service,
               including messages sent through a WhatsApp connection you configured.
             </p>
@@ -96,8 +96,8 @@ export default function TermsPage() {
           <LegalSection title="8. Contact">
             <p>
               Questions about these terms:{" "}
-              <a href="mailto:hello@pulsecommerce.io" className="text-primary hover:underline">
-                hello@pulsecommerce.io
+              <a href="mailto:hello@setups.works" className="text-primary hover:underline">
+                hello@setups.works
               </a>
               .
             </p>

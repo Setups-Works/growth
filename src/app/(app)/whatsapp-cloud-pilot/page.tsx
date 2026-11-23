@@ -30,7 +30,7 @@ interface CloudMessageTemplate {
 export default function WhatsAppCloudPilotPage() {
   const [mode, setMode] = useState<"template" | "text">("template");
   const [to, setTo] = useState("");
-  const [message, setMessage] = useState("Hello from the PulseCommerce Cloud API pilot.");
+  const [message, setMessage] = useState("Hello from the Setups Works Growth Cloud API pilot.");
   const [sending, setSending] = useState(false);
 
   const [templates, setTemplates] = useState<CloudMessageTemplate[] | null>(null);

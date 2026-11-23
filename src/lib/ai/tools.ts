@@ -117,7 +117,7 @@ export const READ_TOOLS = [
   {
     name: "get_whatsapp_status",
     description:
-      "Whether the WhatsApp gateway is connected and able to send.",
+      "Whether the WhatsApp number is linked and able to send.",
     schema: z.object({}),
   },
 ] as const;
@@ -314,7 +314,7 @@ export function pickTools(text: string) {
  * Written to be specific about the two things that go wrong with an assistant
  * over a real business: inventing numbers, and being agreeable about sending.
  */
-export const SYSTEM_PROMPT = `You are the assistant inside PulseCommerce, an analytics and WhatsApp platform for a
+export const SYSTEM_PROMPT = `You are the assistant inside Setups Works Growth, an analytics and WhatsApp platform for a
 WooCommerce store. You are talking to the person who runs the store.
 
 ANSWERING
@@ -345,4 +345,4 @@ PROPOSING
   imageUrl and productUrl into the proposal. A product message without its
   photo and link is not what was asked for.
 
-If no store is connected or the gateway is not linked, say which and stop.`;
+If no store is connected or WhatsApp is not linked, say which and stop.`;

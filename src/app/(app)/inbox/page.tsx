@@ -74,7 +74,7 @@ export default function InboxPage() {
       setError(null);
       setChats(body.chats ?? []);
     } catch {
-      setError("Could not reach the gateway.");
+      setError("Could not reach WhatsApp.");
       setChats([]);
     }
   }, []);
@@ -197,7 +197,7 @@ export default function InboxPage() {
           </CardHeader>
           <CardContent>
             <Button asChild size="sm" variant="outline">
-              <Link href="/settings">Check the WhatsApp gateway</Link>
+              <Link href="/settings?section=whatsapp">Check WhatsApp settings</Link>
             </Button>
           </CardContent>
         </Card>

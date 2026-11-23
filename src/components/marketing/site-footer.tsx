@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Activity, ArrowRight, Mail } from "lucide-react";
+import { TrendingUp, ArrowRight, Mail } from "lucide-react";
 import { siGithub, siX } from "simple-icons";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { BrandMark, BRANDS } from "@/components/marketing/brand-mark";
+import { BrandName } from "@/components/brand-name";
 
 /**
  * Shared across every marketing page, so the columns cannot drift apart.
@@ -27,8 +28,6 @@ const COLUMNS: [string, [string, string][]][] = [
       ["Integrations", "/integrations"],
       ["Pricing", "/pricing"],
       ["Changelog", "/changelog"],
-      ["Developers", "/developers"],
-      ["Docs", "/docs"],
       ["API reference", "/api-docs"],
     ],
   ],
@@ -62,7 +61,7 @@ const COLUMNS: [string, [string, string][]][] = [
 const SOCIALS: { label: string; href: string; render: () => React.ReactNode }[] = [
   {
     label: "GitHub",
-    href: "https://github.com/nitheeshdr/PulseCommerce",
+    href: "https://github.com/Setups-Works/growth",
     render: () => <BrandMark icon={siGithub} className="size-4" />,
   },
   {
@@ -72,7 +71,7 @@ const SOCIALS: { label: string; href: string; render: () => React.ReactNode }[] 
   },
   {
     label: "Email us",
-    href: "mailto:hello@pulsecommerce.io",
+    href: "mailto:hello@setups.works",
     render: () => <Mail className="size-4" />,
   },
 ];
@@ -84,9 +83,9 @@ export function SiteFooter() {
         <div>
           <div className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Activity className="size-4.5" strokeWidth={2.5} />
+              <TrendingUp className="size-4.5" strokeWidth={2.5} />
             </span>
-            <span className="text-base font-semibold tracking-tight">PulseCommerce</span>
+            <BrandName />
           </div>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
             AI commerce intelligence for WooCommerce stores that would rather act on their numbers
@@ -162,7 +161,7 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 text-xs text-muted-foreground sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span>© 2026 PulseCommerce.</span>
+            <span>© 2026 Setups Works Growth.</span>
             <Link href="/about" className="transition-colors hover:text-foreground">
               About
             </Link>

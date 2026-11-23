@@ -103,7 +103,7 @@ export async function PATCH(request: Request) {
     let createdWebhook: WooWebhook;
     try {
       createdWebhook = await woo.createWebhook({
-        name: "PulseCommerce — order confirmation (created)",
+        name: "Setups Works Growth — order confirmation (created)",
         topic: "order.created",
         deliveryUrl,
         secret,
@@ -125,7 +125,7 @@ export async function PATCH(request: Request) {
     let updatedWebhook: WooWebhook;
     try {
       updatedWebhook = await woo.createWebhook({
-        name: "PulseCommerce — order confirmation (updated)",
+        name: "Setups Works Growth — order confirmation (updated)",
         topic: "order.updated",
         deliveryUrl,
         secret,

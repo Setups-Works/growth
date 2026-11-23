@@ -36,7 +36,7 @@ export function buildInvoicePdf(invoice: Invoice, account: { email: string }): B
   doc.setFont(FONT, "bold");
   doc.setFontSize(20);
   doc.setTextColor(...BRAND);
-  doc.text("PulseCommerce", MARGIN, y);
+  doc.text("Setups Works Growth", MARGIN, y);
   doc.setFontSize(11);
   doc.setTextColor(...MUTED);
   doc.text("Invoice", pageWidth - MARGIN, y, { align: "right" });
@@ -77,7 +77,7 @@ export function buildInvoicePdf(invoice: Invoice, account: { email: string }): B
   doc.setFont(FONT, "normal");
   doc.setFontSize(11);
   doc.setTextColor(...INK);
-  doc.text(`PulseCommerce ${PLAN_LABEL[invoice.plan]} plan — ${start} to ${end}`, MARGIN, y);
+  doc.text(`Setups Works Growth ${PLAN_LABEL[invoice.plan]} plan — ${start} to ${end}`, MARGIN, y);
   doc.text(fmt.currency(invoice.amountPaise / 100), pageWidth - MARGIN, y, { align: "right" });
   y += 30;
 

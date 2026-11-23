@@ -10,22 +10,20 @@ import { PLANS } from "@/lib/marketing/plans";
  * page the first time somebody edits one and not the other.
  *
  * SITE_URL has to be absolute for `@id`, `url` and canonical tags to resolve.
- * Vercel exposes the deployment host but not the scheme, hence the assembly
- * below; set NEXT_PUBLIC_SITE_URL in production so previews and the primary
- * domain do not both claim to be canonical.
+ * Set NEXT_PUBLIC_SITE_URL (a build-time value) in production; otherwise
+ * APP_URL is used, then localhost.
  */
 
 export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "http://localhost:3000")
+  process.env.APP_URL ??
+  "http://localhost:3000"
 ).replace(/\/$/, "");
 
-export const SITE_NAME = "PulseCommerce";
+export const SITE_NAME = "Setups Works Growth";
 export const SITE_TAGLINE = "AI Commerce Intelligence Platform for WooCommerce";
 export const SITE_DESCRIPTION =
-  "PulseCommerce turns your WooCommerce orders into revenue analytics, RFM segments, predicted lifetime value, churn risk, cohort retention and forecasts — then reaches those customers on WhatsApp from the same screen.";
+  "Setups Works Growth turns your WooCommerce orders into revenue analytics, RFM segments, predicted lifetime value, churn risk, cohort retention and forecasts — then reaches those customers on WhatsApp from the same screen.";
 
 function absolute(path: string) {
   return `${SITE_URL}${path}`;

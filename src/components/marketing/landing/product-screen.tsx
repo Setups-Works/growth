@@ -186,7 +186,7 @@ function Sidebar({ active }: { active: string }) {
         <span className="flex size-5 items-center justify-center rounded-md bg-primary text-[9px] font-bold text-primary-foreground">
           P
         </span>
-        <span className="text-[11px] font-semibold tracking-tight">PulseCommerce</span>
+        <span className="text-[11px] font-semibold tracking-tight">Growth</span>
       </div>
 
       <div className="flex-1 overflow-hidden px-2 py-2">

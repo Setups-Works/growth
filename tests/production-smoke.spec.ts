@@ -15,13 +15,13 @@ test("the API description is served", async ({ request }) => {
   const res = await request.get("/api/openapi");
   expect(res.ok()).toBeTruthy();
   const doc = await res.json();
-  expect(doc.info.title).toBe("PulseCommerce API");
+  expect(doc.info.title).toBe("Setups Works Growth API");
 });
 
 test("the app shell renders", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.status()).toBeLessThan(400);
-  await expect(page).toHaveTitle(/PulseCommerce/i);
+  await expect(page).toHaveTitle(/Setups Works Growth/i);
 });
 
 test("settings answers without erroring", async ({ request }) => {

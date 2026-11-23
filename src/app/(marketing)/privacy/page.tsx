@@ -3,7 +3,7 @@ import { Section } from "@/components/marketing/sections";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "What PulseCommerce collects, why, and who it's shared with.",
+  description: "What Setups Works Growth collects, why, and who it's shared with.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
         <div className="mt-10 space-y-10 text-base leading-relaxed text-muted-foreground">
           <LegalSection title="Who this covers">
             <p>
-              This policy covers data PulseCommerce (operated by Setups Works, Udyam Registration
+              This policy covers data Setups Works Growth (operated by Setups Works, Udyam Registration
               UDYAM-TN-24-0086773) collects from merchants who create an account. It does not cover
               how an individual merchant chooses to message their own customers — that&apos;s the
               merchant&apos;s own responsibility under our Terms of Service.
@@ -65,7 +65,7 @@ export default function PrivacyPage() {
 
           <LegalSection title="Who it's shared with">
             <ul className="list-disc space-y-2 pl-5">
-              <li>Supabase, our database and authentication provider.</li>
+              <li>Our hosting provider, which runs the servers and database this service is stored on.</li>
               <li>Razorpay, for payment processing on paid plans.</li>
               <li>
                 Your own WhatsApp Business connection — messages you send go through WhatsApp
@@ -86,8 +86,8 @@ export default function PrivacyPage() {
           <LegalSection title="Contact">
             <p>
               Privacy questions or a deletion request:{" "}
-              <a href="mailto:hello@pulsecommerce.io" className="text-primary hover:underline">
-                hello@pulsecommerce.io
+              <a href="mailto:hello@setups.works" className="text-primary hover:underline">
+                hello@setups.works
               </a>
               .
             </p>

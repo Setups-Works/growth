@@ -39,12 +39,10 @@ import type { StoreSnapshot, WooCustomer, WooOrder, WooProduct } from "./types";
  * The TTL used to be a hardcoded 15 seconds, on the theory that a local
  * Postgres read is cheap enough not to matter. It is not free:
  * `pg_stat_statements` showed this store's ~21,700-order table (raw column:
- * ~90MB) being read close to whole on nearly every cache miss, and on Vercel
- * a fresh serverless instance is the common case, not the exception — so a
- * 15-second window bought almost nothing while still generating tens of
- * gigabytes of Supabase egress. Sync already bounds real staleness to one
- * cycle (10 minutes, see supabase/migrations/20260812070000_faster_backfill_
- * cron.sql) and calls `forgetSnapshot` the moment new data lands, so a memo
+ * ~90MB) being read close to whole on nearly every cache miss — so a
+ * 15-second window bought almost nothing while still generating heavy
+ * database reads. Sync already bounds real staleness to one cycle (10
+ * minutes, see docker/cron/crontab) and calls `forgetSnapshot` the moment new data lands, so a memo
  * living that long costs nothing in freshness and saves the re-reads that
  * happen for reasons other than new data existing.
  *

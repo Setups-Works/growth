@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, MessageCircle, ShieldCheck, TriangleAlert, Unplug } from "lucide-react";
+import { CheckCircle2, Loader2, MessageCircle, Save, TriangleAlert, Unplug } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,72 +12,55 @@ import { Label } from "@/components/ui/label";
 import { useAnalytics } from "@/components/providers/analytics-provider";
 import { WhatsAppLinkQr } from "@/components/whatsapp/whatsapp-link-qr";
 import { dialCodeForCurrency } from "@/lib/whatsapp/phone";
-import { formatDateTime } from "@/lib/format";
 
-interface RedactedWhatsApp {
-  baseUrl: string;
-  sessionId: string;
-  sessionName: string | null;
+interface Preferences {
   phone: string | null;
-  apiKey: string;
   defaultDialCode: string;
   delayBetweenMessagesMs: number;
   updatedAt: string | null;
 }
 
 interface SessionState {
-  id: string;
-  name: string;
   status: string;
   phone: string | null;
   pushName: string | null;
+  lastError?: string | null;
 }
 
 interface SettingsResponse {
+  available?: boolean;
   connected: boolean;
-  /** Set from WHATSAPP_API_URL / WHATSAPP_API_KEY rather than through this form. */
-  fromEnv?: boolean;
-  config: RedactedWhatsApp | null;
+  config: Preferences | null;
   session: SessionState | null;
   ready?: boolean;
   error?: string | null;
-  warning?: string | null;
 }
 
 /**
- * Connects a self-hosted OpenWA gateway.
- *
- * The API key is entered once and never comes back to the browser: the server
- * verifies it against the gateway before saving, and afterwards this shows only
- * a masked form of it, the same as the WooCommerce credentials above.
+ * Links this account's WhatsApp number as a linked device — the same as
+ * WhatsApp Web: scan the QR from WhatsApp → Linked devices on the phone.
+ * Campaigns, flows, reminders, the inbox and the menu bot all send through it.
  */
 export function WhatsAppSettingsCard() {
   const [state, setState] = useState<SettingsResponse | null>(null);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [sessionId, setSessionId] = useState("");
   const [dialCode, setDialCode] = useState("");
+  const [paceSeconds, setPaceSeconds] = useState("");
   const [busy, setBusy] = useState(false);
 
-  /*
-   * The store's currency is already in the browser, so the country code is
-   * suggested from here rather than looked up on the server. An earlier version
-   * inferred it from the order snapshot during connect, which meant a cold
-   * cache turned a WhatsApp connection into a multi-minute WooCommerce pull and
-   * timed the request out.
-   */
   const { data } = useAnalytics();
   const suggestedDialCode = data ? dialCodeForCurrency(data.meta.currency) : "";
-  const effectiveDialCode = dialCode.trim() || suggestedDialCode;
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/whatsapp/settings", { cache: "no-store" });
       const body = (await res.json()) as SettingsResponse;
       setState(body);
-      if (body.config) setBaseUrl(body.config.baseUrl);
+      if (body.config) {
+        setDialCode(body.config.defaultDialCode);
+        setPaceSeconds(String(body.config.delayBetweenMessagesMs / 1000));
+      }
     } catch {
-      setState({ connected: false, config: null, session: null });
+      setState({ connected: false, config: null, session: null, error: "Could not load WhatsApp settings." });
     }
   }, []);
 
@@ -86,45 +69,46 @@ export function WhatsAppSettingsCard() {
     void load();
   }, [load]);
 
-  const connect = async () => {
+  const savePreferences = async () => {
     setBusy(true);
     try {
+      const seconds = Number(paceSeconds);
       const res = await fetch("/api/whatsapp/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          baseUrl,
-          apiKey,
-          ...(sessionId.trim() ? { sessionId: sessionId.trim() } : {}),
-          defaultDialCode: effectiveDialCode,
+          defaultDialCode: (dialCode.trim() || suggestedDialCode).replace(/\D/g, ""),
+          ...(Number.isFinite(seconds) && seconds > 0
+            ? { delayBetweenMessagesMs: Math.round(seconds * 1000) }
+            : {}),
         }),
       });
-      const body = (await res.json()) as SettingsResponse & { error?: string };
+      const body = (await res.json()) as { error?: string };
       if (!res.ok) {
-        toast.error(body.error ?? "The gateway could not be verified.");
+        toast.error(body.error ?? "Could not save.");
         return;
       }
-      setState(body);
-      setApiKey("");
-      setSessionId("");
-      if (body.warning) toast.warning(body.warning);
-      else toast.success("WhatsApp gateway connected.");
-    } catch {
-      toast.error("The connection request failed.", {
-        description:
-          "This app could not complete the request. Check the browser network tab — the gateway itself may be fine.",
-      });
+      toast.success("WhatsApp preferences saved.");
+      await load();
     } finally {
       setBusy(false);
     }
   };
 
-  const disconnect = async () => {
+  const unlink = async () => {
+    if (!window.confirm("Unlink this WhatsApp number? Campaigns, flows and the menu bot stop sending until you link again.")) {
+      return;
+    }
     setBusy(true);
     try {
-      await fetch("/api/whatsapp/settings", { method: "DELETE" });
-      setState({ connected: false, config: null, session: null });
-      toast.success("WhatsApp gateway disconnected.");
+      const res = await fetch("/api/whatsapp/settings", { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error ?? "Could not unlink.");
+        return;
+      }
+      toast.success("WhatsApp number unlinked.");
+      await load();
     } finally {
       setBusy(false);
     }
@@ -132,6 +116,7 @@ export function WhatsAppSettingsCard() {
 
   const session = state?.session;
   const ready = state?.ready ?? false;
+  const linkedNumber = session?.phone ?? state?.config?.phone ?? null;
 
   return (
     <Card>
@@ -140,23 +125,17 @@ export function WhatsAppSettingsCard() {
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
               <MessageCircle className="size-4 text-muted-foreground" />
-              WhatsApp gateway
+              WhatsApp
             </CardTitle>
             <CardDescription className="text-xs">
-              A self-hosted OpenWA instance. Campaigns send through it; this app never
-              connects to WhatsApp directly.
+              Link your WhatsApp Business (or personal) number as a linked device, like
+              WhatsApp Web. Campaigns, flows, reminders, the inbox and the menu bot all use it.
             </CardDescription>
           </div>
-          {state?.fromEnv ? (
-            <Badge variant="outline" className="shrink-0 gap-1">
-              <ShieldCheck className="size-3" />
-              From environment
-            </Badge>
-          ) : null}
-          {state?.connected ? (
+          {state?.available !== false && state ? (
             <Badge variant={ready ? "default" : "secondary"} className="shrink-0 gap-1">
               {ready ? <CheckCircle2 className="size-3" /> : <TriangleAlert className="size-3" />}
-              {ready ? "Ready" : (session?.status ?? "Unreachable")}
+              {ready ? "Linked" : session?.status === "initializing" ? "Connecting" : "Not linked"}
             </Badge>
           ) : null}
         </div>
@@ -166,129 +145,77 @@ export function WhatsAppSettingsCard() {
         {state?.error ? (
           <Alert variant="destructive">
             <TriangleAlert className="size-4" />
-            <AlertTitle className="text-xs font-medium">Gateway unreachable</AlertTitle>
+            <AlertTitle className="text-xs font-medium">WhatsApp unavailable</AlertTitle>
             <AlertDescription className="text-xs">{state.error}</AlertDescription>
           </Alert>
         ) : null}
 
-        {state?.connected && state.config ? (
-          <div className="space-y-4">
-          <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-            <Row label="Gateway" value={state.config.baseUrl} />
-            <Row label="API key" value={state.config.apiKey} mono />
-            <Row label="Session" value={state.config.sessionName ?? state.config.sessionId} />
-            {/*
-              The gateway keeps `phone` on the session after a connection
-              drops, so it is the last number paired rather than a live one.
-              Labelling that "Linked number" reads as connected when it is not.
-            */}
-            <Row
-              label={ready ? "Linked number" : "Last linked"}
-              value={
-                session?.phone ?? state.config.phone
-                  ? `${session?.phone ?? state.config.phone}${ready ? "" : " · not connected"}`
-                  : "never linked"
-              }
-              mono
-            />
-            <Row
-              label="Default country code"
-              value={state.config.defaultDialCode ? `+${state.config.defaultDialCode}` : "not set"}
-            />
-            <Row
-              label="Pace"
-              value={`${(state.config.delayBetweenMessagesMs / 1000).toFixed(1)}s between messages`}
-            />
-            {state.config.updatedAt ? (
-              <Row label="Connected" value={formatDateTime(state.config.updatedAt)} />
-            ) : null}
-          </dl>
+        {state?.available === false ? null : (
+          <>
+            {ready ? (
+              <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+                <Row label="Linked number" value={linkedNumber ? `+${linkedNumber}` : "linked"} mono />
+                {session?.pushName ? <Row label="WhatsApp name" value={session.pushName} /> : null}
+              </dl>
+            ) : (
+              <div className="space-y-2">
+                {linkedNumber ? (
+                  <p className="text-xs text-muted-foreground">
+                    Last linked: <span className="font-mono">+{linkedNumber}</span> · not connected.
+                  </p>
+                ) : null}
+                {session?.lastError ? <p className="text-xs text-muted-foreground">{session.lastError}</p> : null}
+                <WhatsAppLinkQr onLinked={load} />
+              </div>
+            )}
 
-          {!ready ? <WhatsAppLinkQr onLinked={load} /> : null}
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="wa-url">Gateway URL</Label>
-              <Input
-                id="wa-url"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://wa.yourdomain.com"
-                autoComplete="url"
-              />
+            <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="wa-dial">Default country code</Label>
+                <Input
+                  id="wa-dial"
+                  value={dialCode}
+                  onChange={(e) => setDialCode(e.target.value)}
+                  placeholder={suggestedDialCode ? `${suggestedDialCode} (from ${data?.meta.currency})` : "91"}
+                  inputMode="numeric"
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Applied to customer numbers stored without one. Getting this wrong sends to the
+                  wrong country.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="wa-pace">Seconds between messages</Label>
+                <Input
+                  id="wa-pace"
+                  value={paceSeconds}
+                  onChange={(e) => setPaceSeconds(e.target.value)}
+                  placeholder="4"
+                  inputMode="decimal"
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Minimum 1. Slower is safer — sending too fast can get a number restricted.
+                </p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="wa-key">API key</Label>
-              <Input
-                id="wa-key"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="operator key from OpenWA"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="wa-session">
-                Session ID <span className="text-muted-foreground">(optional)</span>
-              </Label>
-              <Input
-                id="wa-session"
-                value={sessionId}
-                onChange={(e) => setSessionId(e.target.value)}
-                placeholder="adopted automatically if only one"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="wa-dial">Default country code</Label>
-              <Input
-                id="wa-dial"
-                value={dialCode}
-                onChange={(e) => setDialCode(e.target.value)}
-                placeholder={suggestedDialCode ? `${suggestedDialCode} (from ${data?.meta.currency})` : "91"}
-                inputMode="numeric"
-              />
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Applied to customer numbers stored without one. Getting this wrong sends to
-                the wrong country, so it is worth checking.
-              </p>
-            </div>
-
-            <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">
-              Use an <strong>operator</strong> key rather than your admin key — sending is all
-              this needs. The key is verified against the gateway before it is saved, and is
-              never sent back to the browser afterwards.
-            </p>
-          </div>
+          </>
         )}
       </CardContent>
 
-      <CardFooter className="gap-2 border-t pt-4">
-        {state?.fromEnv ? (
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Set by <code>WHATSAPP_API_URL</code> and <code>WHATSAPP_API_KEY</code> on the host.
-            Change them there and redeploy; this connection cannot be edited or removed here,
-            which is what stops it being lost by accident.
-          </p>
-        ) : state?.connected ? (
-          <Button variant="outline" size="sm" onClick={disconnect} disabled={busy} className="gap-1.5">
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Unplug className="size-4" />}
-            Disconnect
+      {state?.available === false ? null : (
+        <CardFooter className="gap-2 border-t pt-4">
+          <Button size="sm" onClick={savePreferences} disabled={busy} className="gap-1.5">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            Save preferences
           </Button>
-        ) : (
-          <Button
-            size="sm"
-            onClick={connect}
-            disabled={busy || baseUrl.trim().length < 4 || apiKey.trim().length < 8}
-            className="gap-1.5"
-          >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-            Connect gateway
-          </Button>
-        )}
-      </CardFooter>
+          {ready || linkedNumber ? (
+            <Button variant="outline" size="sm" onClick={unlink} disabled={busy} className="gap-1.5">
+              <Unplug className="size-4" />
+              Unlink number
+            </Button>
+          ) : null}
+        </CardFooter>
+      )}
     </Card>
   );
 }
