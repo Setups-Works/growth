@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       connected: false,
       config: null,
       session: null,
-      error: "WhatsApp is not enabled on this server (WHATSAPP_ENGINE_URL is not set).",
+      error: "WhatsApp is turned off on this server (WHATSAPP_DISABLED=true).",
     });
   }
 

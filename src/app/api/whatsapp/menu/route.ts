@@ -21,8 +21,7 @@ export const dynamic = "force-dynamic";
  * The inbound menu bot's configuration.
  *
  * A thin proxy to the WhatsApp engine's per-account `chat-flow` plugin, which
- * answers inbound messages (whatsapp/src/menu-bot.mjs). The engine key stays on
- * the server.
+ * answers inbound messages (src/lib/whatsapp/engine/menu-bot.ts).
  */
 
 /**

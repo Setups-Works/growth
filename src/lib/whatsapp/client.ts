@@ -1,26 +1,19 @@
 import type { WhatsAppConfig } from "./config";
+import { WhatsAppApiError } from "./engine/errors";
+
+export { WhatsAppApiError };
 
 /**
- * Client for the bundled WhatsApp engine (whatsapp/src/server.mjs).
+ * One account's WhatsApp, served by the engine running inside this Next.js
+ * server (src/lib/whatsapp/engine). Every route goes through this class, so
+ * the engine is only ever reached with the caller's own session id — the
+ * account's user id.
  *
- * The engine holds one linked-device session per account (session id = user
- * id) and is reachable only on the private Docker network, authenticated with
- * WHATSAPP_ENGINE_KEY. Its endpoint shapes are documented at the top of
- * whatsapp/src/server.mjs; change both sides together.
+ * The engine is imported lazily: it pulls in the WhatsApp protocol library,
+ * which must never reach a browser bundle or slow down routes that don't send.
  */
 
-export class WhatsAppApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly endpoint: string,
-  ) {
-    super(message);
-    this.name = "WhatsAppApiError";
-  }
-}
-
-/** Session state as reported by GET /api/sessions/{id}. */
+/** Session state. */
 export interface WhatsAppSession {
   id: string;
   name: string;
@@ -113,194 +106,96 @@ export function isSessionSendable(session: {
   return session.status === READY_STATUS && session.engineLoaded !== false;
 }
 
+
 export class WhatsAppClient {
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
   readonly sessionId: string;
 
-  constructor(config: Pick<WhatsAppConfig, "baseUrl" | "apiKey" | "sessionId">) {
-    this.baseUrl = config.baseUrl.replace(/\/+$/, "");
-    this.apiKey = config.apiKey;
+  constructor(config: Pick<WhatsAppConfig, "sessionId">) {
     this.sessionId = config.sessionId;
   }
 
-  private async request<T>(
-    path: string,
-    init: { method?: string; body?: unknown; timeoutMs?: number } = {},
-  ): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? 30_000);
+  private async session() {
+    const { getSession } = await import("./engine");
+    return getSession(this.sessionId);
+  }
 
-    let response: Response;
+  /** Runs an engine call, turning unexpected failures into WhatsAppApiError. */
+  private async call<T>(endpoint: string, fn: () => Promise<T>): Promise<T> {
     try {
-      response = await fetch(url, {
-        method: init.method ?? "GET",
-        headers: {
-          "X-API-Key": this.apiKey,
-          ...(init.body ? { "Content-Type": "application/json" } : {}),
-        },
-        body: init.body ? JSON.stringify(init.body) : undefined,
-        signal: controller.signal,
-        cache: "no-store",
-      });
+      return await fn();
     } catch (error) {
-      const aborted = error instanceof Error && error.name === "AbortError";
-      throw new WhatsAppApiError(
-        aborted
-          ? "The WhatsApp engine did not respond in time."
-          : "Could not reach the WhatsApp engine. Check that the `whatsapp` service is running.",
-        0,
-        path,
-      );
-    } finally {
-      clearTimeout(timeout);
+      if (error instanceof WhatsAppApiError) throw error;
+      throw new WhatsAppApiError(error instanceof Error ? error.message : String(error), 502, endpoint);
     }
-
-    const text = await response.text();
-    let payload: unknown = null;
-    try {
-      payload = text ? JSON.parse(text) : null;
-    } catch {
-      // A non-JSON body means something other than the engine answered —
-      // a proxy error page, most likely. Keep the text for the message.
-    }
-
-    if (!response.ok) {
-      throw new WhatsAppApiError(describeError(payload, text, response.status), response.status, path);
-    }
-
-    return payload as T;
   }
 
-  /** Connection state. Also the cheapest way to verify a base URL and key. */
-  getSession(): Promise<WhatsAppSession> {
-    return this.request<WhatsAppSession>(`/api/sessions/${this.sessionId}`);
+  /** Connection state. */
+  async getSession(): Promise<WhatsAppSession> {
+    return (await this.session()).toJSON();
   }
 
-  /** Open conversations, newest first. Note the path uses {id}, not {sessionId}. */
+  /** Open conversations, newest first. */
   listChats(limit = 50): Promise<WhatsAppChat[]> {
-    return this.request<WhatsAppChat[]>(
-      `/api/sessions/${this.sessionId}/chats?limit=${limit}`,
-      { timeoutMs: 45_000 },
-    );
-  }
-
-  /** Stored messages for one conversation, oldest last as the engine returns them. */
-  async getMessages(chatId: string, limit = 50): Promise<WhatsAppMessage[]> {
-    const body = await this.request<{ messages?: WhatsAppMessage[] }>(
-      `/api/sessions/${this.sessionId}/messages?chatId=${encodeURIComponent(chatId)}&limit=${limit}`,
-      { timeoutMs: 45_000 },
-    );
-    return body?.messages ?? [];
-  }
-
-  listSessions(): Promise<WhatsAppSession[]> {
-    return this.request<WhatsAppSession[]>("/api/sessions");
-  }
-
-  /** Boots this account's session; idempotent. */
-  startSession(): Promise<WhatsAppSession> {
-    return this.request<WhatsAppSession>(`/api/sessions/${this.sessionId}/start`, {
-      method: "POST",
-      timeoutMs: 60_000,
+    return this.call("chats", async () => {
+      const { listChats } = await import("./engine/store");
+      return listChats(this.sessionId, Math.min(200, Math.max(1, limit)));
     });
   }
 
-  /**
-   * Gets the session running, whether or not it already was.
-   *
-   * "Session is already started" comes back as a 400, which reads as a failure
-   * but describes exactly the state the caller wanted. Treating it as an error
-   * meant refreshing a QR panel reported a problem instead of showing the QR
-   * that was sitting there ready.
-   */
-  async ensureStarted(): Promise<WhatsAppSession> {
-    try {
-      return await this.startSession();
-    } catch (error) {
-      if (error instanceof WhatsAppApiError && error.status === 400) {
-        return this.getSession();
-      }
-      throw error;
-    }
+  /** Stored messages for one conversation, oldest first. */
+  getMessages(chatId: string, limit = 50): Promise<WhatsAppMessage[]> {
+    return this.call("messages", async () => {
+      const { listMessages } = await import("./engine/store");
+      return listMessages(this.sessionId, chatId, Math.min(500, Math.max(1, limit)));
+    });
   }
 
-  /**
-   * The pairing QR as a data URL, while one is being offered.
-   *
-   * The engine answers 400 once a session is already authenticated, which is
-   * a normal outcome here rather than a failure, so it is reported as "no QR"
-   * instead of thrown.
-   */
+  /** Gets the session running, whether or not it already was. Idempotent. */
+  ensureStarted(): Promise<WhatsAppSession> {
+    return this.call("start", async () => {
+      const s = await this.session();
+      await s.start();
+      return s.toJSON();
+    });
+  }
+
+  /** The pairing QR as a data URL, while one is being offered. */
   async getQr(): Promise<{ qrCode: string | null; status: string | null }> {
-    try {
-      const body = await this.request<{ qrCode?: string; status?: string }>(
-        `/api/sessions/${this.sessionId}/qr`,
-      );
-      return { qrCode: body?.qrCode ?? null, status: body?.status ?? null };
-    } catch (error) {
-      if (error instanceof WhatsAppApiError && error.status === 400) {
-        return { qrCode: null, status: null };
-      }
-      throw error;
-    }
+    const s = await this.session();
+    return s.qr ? { qrCode: s.qr, status: s.status } : { qrCode: null, status: null };
   }
 
   /**
-   * Returns a session that can actually send, restarting the engine if that is
-   * all that is wrong.
+   * Returns a session that can actually send, reconnecting it if that is all
+   * that is wrong.
    *
-   * When the engine process restarts, the session row survives saying "ready"
-   * while the in-memory engine does not — and every send then fails with
-   * "Session is not active". The pairing credentials are on disk, though, so
-   * starting the engine reconnects the same number in a few seconds with no QR
-   * and no human involved. Recovering here means a restart costs a moment
-   * rather than a re-scan, which matters on any host that recycles processes.
-   *
+   * After a server restart the pairing is on disk but the socket may not be up
+   * yet; starting it reconnects the same number in a few seconds with no QR.
    * A session that was never linked is returned unchanged: no amount of
-   * restarting substitutes for scanning a QR.
+   * restarting substitutes for a scan.
    */
   async ensureSendable(waitMs = 20_000): Promise<WhatsAppSession> {
     let session = await this.getSession();
     if (isSessionSendable(session)) return session;
 
-    /*
-     * Two shapes of the same problem, both recoverable because the pairing is
-     * on disk and only the engine is missing:
-     *
-     *   ready + engineLoaded false  — the process restarted under the session,
-     *                                 so the row outlived the engine
-     *   disconnected + a phone      — the session was stopped, but it remembers
-     *                                 which number it was linked to
-     *
-     * A session with no phone has never been linked, and no restart substitutes
-     * for scanning a QR.
-     */
     const recoverable =
       Boolean(session.phone) &&
       !session.engineLoaded &&
-      (session.status === READY_STATUS || session.status === "disconnected");
+      ["ready", "disconnected", "initializing"].includes(session.status);
     if (!recoverable) return session;
 
     await this.ensureStarted().catch(() => {});
 
     const deadline = Date.now() + waitMs;
     while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       session = await this.getSession();
       if (isSessionSendable(session)) return session;
-      // A dropped pairing surfaces as a QR offer; restarting cannot fix that,
-      // so stop waiting rather than burning the whole budget on it.
+      // A dropped pairing surfaces as a QR offer; waiting cannot fix that.
       if (session.status === "qr_ready") break;
     }
 
     return session;
-  }
-
-  /** Unlinks the device from WhatsApp and deletes the session's local data. */
-  logout(): Promise<unknown> {
-    return this.request(`/api/sessions/${this.sessionId}/logout`, { method: "POST", timeoutMs: 30_000 });
   }
 
   /**
@@ -309,109 +204,82 @@ export class WhatsAppClient {
    * WhatsApp is both wasted and a pattern that attracts restrictions.
    */
   checkNumber(number: string): Promise<NumberCheck> {
-    return this.request<NumberCheck>(
-      `/api/sessions/${this.sessionId}/contacts/check/${encodeURIComponent(number)}`,
-    );
+    return this.call("contacts/check", async () => (await this.session()).checkNumber(number));
   }
 
   sendText(chatId: string, text: string): Promise<SentMessage> {
-    return this.request<SentMessage>(`/api/sessions/${this.sessionId}/messages/send-text`, {
-      method: "POST",
-      body: { chatId, text },
-      timeoutMs: 45_000,
-    });
+    return this.call("send-text", async () => (await this.session()).sendText(chatId, text));
   }
 
   sendImage(chatId: string, url: string, caption?: string): Promise<SentMessage> {
-    return this.request<SentMessage>(`/api/sessions/${this.sessionId}/messages/send-image`, {
-      method: "POST",
-      body: { chatId, url, caption },
-      timeoutMs: 60_000,
-    });
+    return this.call("send-image", async () => (await this.session()).sendImage(chatId, url, caption));
   }
 
   sendVideo(chatId: string, url: string, caption?: string): Promise<SentMessage> {
-    return this.request<SentMessage>(`/api/sessions/${this.sessionId}/messages/send-video`, {
-      method: "POST",
-      body: { chatId, url, caption },
-      timeoutMs: 90_000,
-    });
+    return this.call("send-video", async () => (await this.session()).sendVideo(chatId, url, caption));
   }
 
   /**
-   * Hands a batch to the engine, which then works through it on its own schedule
-   * using the pacing below. It returns as soon as the batch is accepted, so the
-   * caller polls getBatch rather than waiting.
+   * Hands a batch to the engine, which works through it in the background with
+   * the requested pacing. Returns as soon as the batch is accepted.
    */
-  sendBulk(
-    messages: BulkMessageItem[],
-    options: BulkOptions,
-    batchId?: string,
-  ): Promise<BulkAccepted> {
-    return this.request<BulkAccepted>(`/api/sessions/${this.sessionId}/messages/send-bulk`, {
-      method: "POST",
-      body: { messages, options, ...(batchId ? { batchId } : {}) },
-      timeoutMs: 60_000,
-    });
+  sendBulk(messages: BulkMessageItem[], options: BulkOptions, batchId?: string): Promise<BulkAccepted> {
+    return this.call("send-bulk", async () => (await this.session()).sendBulk(messages, options, batchId));
   }
 
-  getBatch(batchId: string): Promise<Record<string, unknown>> {
-    return this.request(
-      `/api/sessions/${this.sessionId}/messages/batch/${encodeURIComponent(batchId)}`,
-    );
+  async getBatch(batchId: string): Promise<Record<string, unknown>> {
+    const batch = (await this.session()).getBatch(batchId);
+    if (!batch) throw new WhatsAppApiError("No such batch.", 404, "batch");
+    return batch;
   }
 
-  cancelBatch(batchId: string): Promise<unknown> {
-    return this.request(
-      `/api/sessions/${this.sessionId}/messages/batch/${encodeURIComponent(batchId)}/cancel`,
-      { method: "POST" },
-    );
+  async cancelBatch(batchId: string): Promise<unknown> {
+    const batch = (await this.session()).cancelBatch(batchId);
+    if (!batch) throw new WhatsAppApiError("No such batch.", 404, "batch/cancel");
+    return batch;
   }
 
-  // --- Plugins -------------------------------------------------------------
-  // Per session: each account has its own menu bot configuration.
+  /** Unlinks the device from WhatsApp and deletes the session's local data. */
+  async logout(): Promise<void> {
+    const s = await this.session();
+    await s.logout();
+    const { dropSession } = await import("./engine");
+    dropSession(this.sessionId);
+  }
 
-  getPlugin(id: string): Promise<{
+  // --- Plugins: per account. Today only the `chat-flow` menu bot. ----------
+
+  async getPlugin(id: string): Promise<{
     id: string;
     status: string;
     version?: string;
     config?: Record<string, unknown>;
   }> {
-    return this.request(`/api/sessions/${this.sessionId}/plugins/${encodeURIComponent(id)}`);
+    await this.requirePlugin(id);
+    const { readPlugin } = await import("./engine/store");
+    const row = await readPlugin(this.sessionId, id);
+    return { id, status: row?.enabled ? "enabled" : "disabled", version: "builtin", config: row?.config ?? {} };
   }
 
-  setPluginConfig(id: string, config: unknown): Promise<unknown> {
-    return this.request(`/api/sessions/${this.sessionId}/plugins/${encodeURIComponent(id)}/config`, {
-      method: "PUT",
-      body: { config },
-    });
+  async setPluginConfig(id: string, config: unknown): Promise<unknown> {
+    await this.requirePlugin(id);
+    const { writePluginConfig } = await import("./engine/store");
+    await writePluginConfig(this.sessionId, id, config);
+    await (await this.session()).reloadPlugins();
+    return { saved: true };
   }
 
-  /** `enabled` false disables it. Installed plugins are inert until enabled. */
-  setPluginEnabled(id: string, enabled: boolean): Promise<unknown> {
-    return this.request(
-      `/api/sessions/${this.sessionId}/plugins/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`,
-      { method: "POST" },
-    );
+  /** `enabled` false disables it. */
+  async setPluginEnabled(id: string, enabled: boolean): Promise<unknown> {
+    await this.requirePlugin(id);
+    const { writePluginEnabled } = await import("./engine/store");
+    await writePluginEnabled(this.sessionId, id, enabled);
+    await (await this.session()).reloadPlugins();
+    return { status: enabled ? "enabled" : "disabled" };
   }
-}
 
-function describeError(payload: unknown, raw: string, status: number): string {
-  if (payload && typeof payload === "object") {
-    const body = payload as { message?: unknown; error?: unknown };
-    const message = Array.isArray(body.message) ? body.message.join(" ") : body.message;
-    if (typeof message === "string" && message) {
-      // These two are worth translating: they are the failures an operator
-      // actually hits, and the raw text does not say what to do about them.
-      if (status === 401) {
-        return `${message}. WHATSAPP_ENGINE_KEY differs between the app and the whatsapp service.`;
-      }
-      return message;
-    }
-    if (typeof body.error === "string" && body.error) return body.error;
+  private async requirePlugin(id: string): Promise<void> {
+    const { MENU_PLUGIN_ID } = await import("./engine/session");
+    if (id !== MENU_PLUGIN_ID) throw new WhatsAppApiError(`Plugin "${id}" is not available.`, 404, "plugins");
   }
-  if (status === 404) {
-    return "Not found on the WhatsApp engine.";
-  }
-  return raw.slice(0, 200) || `The WhatsApp engine returned HTTP ${status}.`;
 }

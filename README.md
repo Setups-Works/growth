@@ -544,9 +544,9 @@ graph TB
         WC --- DB
     end
 
-    subgraph vps["WhatsApp service (Docker)"]
+    subgraph vps["WhatsApp engine (inside the app)"]
         OWA["WhatsApp engine<br/>Baileys, one session per account"]
-        AUTH[("Pairings<br/>wa-data volume")]
+        AUTH[("Pairings<br/>app-data volume")]
         OWA --- AUTH
     end
 
@@ -983,7 +983,7 @@ Everything runs in Docker: the app, PostgreSQL, and a tiny scheduler.
 git clone <your-repo-url> growth
 cd growth
 cp .env.example .env
-# set POSTGRES_PASSWORD, AUTH_SECRET, CRON_SECRET and WHATSAPP_ENGINE_KEY
+# set POSTGRES_PASSWORD, AUTH_SECRET and CRON_SECRET
 # (each: openssl rand -hex 32)
 docker compose up -d --build
 ```
@@ -995,7 +995,6 @@ migrations run automatically when the app container starts.
 |---|---|---|
 | `app` | Next.js standalone server (Node 22 Alpine) | ~350 MB image |
 | `db` | PostgreSQL 17 Alpine, data in the `db-data` volume | — |
-| `whatsapp` | WhatsApp engine — linked-device sessions, menu bot | ~150 MB image |
 | `cron` | BusyBox `crond` calling `/api/cron/*` | ~14 MB image |
 | `caddy` | optional, automatic HTTPS (`--profile https`) | — |
 
@@ -1065,12 +1064,16 @@ WhatsApp is **built in**. Each account links its own number as a **linked
 device** — exactly like WhatsApp Web — by scanning a QR code in the product.
 There is no gateway to deploy and no API key to paste.
 
-Under the hood the `whatsapp` service ([`whatsapp/`](whatsapp)) holds one
-session per account over the WhatsApp Web multi-device protocol
-([Baileys](https://github.com/WhiskeySockets/Baileys)). It is only reachable on
-the private Docker network, authenticated with `WHATSAPP_ENGINE_KEY`, and
-pairings live in the `wa-data` volume, so restarts and redeploys reconnect the
-same number without a new scan.
+Under the hood the app itself holds one session per account over the
+WhatsApp Web multi-device protocol
+([Baileys](https://github.com/WhiskeySockets/Baileys)) — see
+[`src/lib/whatsapp/engine`](src/lib/whatsapp/engine). There is no separate
+WhatsApp service. Pairings live in the `app-data` volume, and the server
+reconnects every linked number when it starts, so restarts and redeploys never
+need a new scan. Set `WHATSAPP_DISABLED=true` to turn WhatsApp off.
+
+Run **one** app instance: the WhatsApp connections live in that process, and
+two instances would fight over the same number.
 
 ### Linking a number
 
@@ -1497,7 +1500,7 @@ All configuration lives in `.env` (copy [`.env.example`](.env.example)).
 | `DISABLE_SIGNUPS` | no | `true` closes registration. |
 | `SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_FROM` | no | Outgoing email for password resets. |
 | `SNAPSHOT_CACHE_MINUTES` | no | How long a snapshot stays warm in memory. Default `10`. |
-| `WHATSAPP_ENGINE_KEY` | **yes** | Shared secret between the app and the built-in WhatsApp engine. |
+| `WHATSAPP_DISABLED` | no | `true` turns the built-in WhatsApp off for every account. |
 | `WHATSAPP_DIAL_CODE` | no | Default country code for new accounts, e.g. `91`. |
 | `WHATSAPP_SEND_DELAY_MS` | no | Default pause between messages. Default `4000`; floor `1000`. |
 | `RAZORPAY_*` | no | Paid plans (UPI Autopay subscriptions). Unset = billing off: every account gets every feature, unlimited. |
@@ -1622,7 +1625,7 @@ B2s is enough) running the whole stack:
    curl -fsSL https://get.docker.com | sh
    git clone <your-repo-url> growth && cd growth
    cp .env.example .env
-   # fill in POSTGRES_PASSWORD, AUTH_SECRET, CRON_SECRET, WHATSAPP_ENGINE_KEY,
+   # fill in POSTGRES_PASSWORD, AUTH_SECRET, CRON_SECRET,
    # DOMAIN=your.domain and APP_URL=https://your.domain
    sudo docker compose --profile https up -d --build
    ```
@@ -1639,9 +1642,10 @@ e.g. a Container Apps *scheduled job* that runs the same `wget` calls as
 [`docker/cron/crontab`](docker/cron/crontab). Run one app replica, or accept
 that the in-memory rate limiter and snapshot memo are per replica.
 
-**WhatsApp** runs in the `whatsapp` container, which needs to stay up — on
-the VM setup it does. On Container Apps, give it its own always-on app with a
-persistent volume for `/data` and set `WHATSAPP_ENGINE_URL` on the web app.
+**WhatsApp** runs inside the app, which therefore needs to stay up as a single
+instance with a persistent volume at `/app/.data` — on the VM setup it does.
+On Container Apps, set min and max replicas to 1 and mount an Azure Files
+share at `/app/.data`.
 
 ---
 
@@ -1666,8 +1670,8 @@ and nothing (WAF, firewall, basic auth) blocks the POST.
 **"The store key is read-only"** on coupon creation — the key predates the scope
 change. Reconnect the store in Settings to re-approve it.
 
-**WhatsApp keeps asking for a new QR** — the `wa-data` volume is not being
-persisted, or the device was unlinked from the phone. Check `docker compose logs whatsapp`.
+**WhatsApp keeps asking for a new QR** — the `app-data` volume is not being
+persisted, or the device was unlinked from the phone. Check `docker compose logs app | grep whatsapp`.
 
 **"The session cannot send right now"** — status and engine disagree, which
 happens after an engine restart. The app restarts the engine automatically; if it

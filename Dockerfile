@@ -40,7 +40,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-RUN addgroup -S -g 1001 app && adduser -S -u 1001 -G app app
+RUN addgroup -S -g 1001 app && adduser -S -u 1001 -G app app \
+ && mkdir -p /app/.data/whatsapp && chown -R app:app /app/.data
 
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static

@@ -6,7 +6,7 @@
  * here is running when a customer writes at three in the morning.
  *
  * This is the other direction, and it does not run in the web app — it runs in
- * the WhatsApp engine (whatsapp/src/menu-bot.mjs), which is what lets it answer
+ * the WhatsApp engine (engine/menu-bot.ts), which is what lets it answer
  * at any hour. What lives in this file is the editing model, so the menu can be
  * built on a screen.
  */

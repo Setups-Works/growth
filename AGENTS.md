@@ -167,17 +167,19 @@ backfilled in a batch later.
 - `docker-compose.yml`, `Dockerfile`, `docker/` — how it runs.
 - `db/migrations/` — the schema.
 
-## WhatsApp is the bundled engine in `whatsapp/`, not an external gateway
+## WhatsApp runs inside the Next.js server, not as a separate service
 
-There is no OpenWA or other third-party gateway any more. The `whatsapp`
-service (`whatsapp/src/`, Node + Baileys) holds one linked-device session per
+There is no OpenWA gateway and no separate WhatsApp container. The engine in
+`src/lib/whatsapp/engine/` (Baileys) holds one linked-device session per
 account — session id = user id — that the account owner links by scanning a QR
-in Settings → WhatsApp. It is reachable only on the Docker network with
-`WHATSAPP_ENGINE_KEY`. Its HTTP API is documented at the top of
-`whatsapp/src/server.mjs` and consumed by `src/lib/whatsapp/client.ts`: change
-both sides together. The menu bot (`chat-flow`) runs inside the engine
-(`whatsapp/src/menu-bot.mjs`); the inbox reads the engine's `wa_messages`
-table. Pairing credentials live on the `wa-data` volume, never in Postgres.
+in Settings → WhatsApp. Routes reach it only through `WhatsAppClient`
+(`src/lib/whatsapp/client.ts`), which imports the engine lazily so the protocol
+library never reaches a browser bundle. Sockets live in a `globalThis`
+registry, so **the app must run as a single instance**; `src/instrumentation.ts`
+reconnects linked accounts at server start. The menu bot (`chat-flow`) is
+`engine/menu-bot.ts`; the inbox reads the `wa_messages` table. Pairing
+credentials live under `.data/whatsapp` (the `app-data` volume), never in
+Postgres. `WHATSAPP_DISABLED=true` turns it all off (the test suite does).
 
 Billing gates (Lite plan, message caps) apply only when Razorpay is configured
 (`billingEnforced()` in `src/lib/billing/usage.ts`); a self-hosted server

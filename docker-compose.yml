@@ -1,7 +1,6 @@
 # Setups Works Growth — the whole stack.
 #
-#   cp .env.example .env    # fill in POSTGRES_PASSWORD, AUTH_SECRET, CRON_SECRET,
-#                           # WHATSAPP_ENGINE_KEY
+#   cp .env.example .env    # fill in POSTGRES_PASSWORD, AUTH_SECRET, CRON_SECRET
 #   docker compose up -d --build
 #
 # Add `--profile https` (and set DOMAIN) to put Caddy with automatic HTTPS in
@@ -38,29 +37,15 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-growth}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-growth}
-      WHATSAPP_ENGINE_URL: http://whatsapp:3001
-      WHATSAPP_ENGINE_KEY: ${WHATSAPP_ENGINE_KEY:?set WHATSAPP_ENGINE_KEY in .env}
     depends_on:
       db:
         condition: service_healthy
+    # WhatsApp pairings (one linked device per account) live here, so restarts
+    # and upgrades reconnect without a new QR scan.
+    volumes:
+      - app-data:/app/.data
     ports:
       - "${APP_PORT:-3000}:3000"
-
-  # WhatsApp: one linked-device session per account (users scan a QR in
-  # Settings → WhatsApp). Pairings live in the wa-data volume, so restarts
-  # reconnect without re-scanning. Not published to the host.
-  whatsapp:
-    build: ./whatsapp
-    image: growth-whatsapp
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-growth}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-growth}
-      WHATSAPP_ENGINE_KEY: ${WHATSAPP_ENGINE_KEY:?set WHATSAPP_ENGINE_KEY in .env}
-    volumes:
-      - wa-data:/data
-    depends_on:
-      app:
-        condition: service_healthy
 
   cron:
     build: ./docker/cron
@@ -91,6 +76,6 @@ services:
 
 volumes:
   db-data:
-  wa-data:
+  app-data:
   caddy-data:
   caddy-config:

@@ -1,7 +1,7 @@
 # src/lib/whatsapp — orientation for AI agents
 
-Everything here talks to the bundled WhatsApp engine (`whatsapp/`, the
-`whatsapp` compose service) — one linked-device session per account, never a
+Everything here talks to the WhatsApp engine running inside this Next.js
+server (`engine/`, Baileys) — one linked-device session per account, never a
 third-party messaging API. See `AGENTS.md`. The gotchas below are specific to
 this directory.
 
@@ -9,15 +9,18 @@ this directory.
 
 Every exported function takes `userId` as a real parameter, and an account's
 engine session id *is* its user id. `readWhatsAppConfig(userId)` returns null
-only when the deployment has no engine (`WHATSAPP_ENGINE_URL` unset); non-null
+only when WhatsApp is disabled (`WHATSAPP_DISABLED=true`); non-null
 does not mean a number is linked — check the session before sending. A config
 helper with no id parameter in a multi-tenant app has no way to be correct
 (see `AGENTS.md` § "Known-shape bug").
 
-## client.ts ↔ whatsapp/src/server.mjs
+## client.ts → engine/
 
-`client.ts` is the only caller of the engine's HTTP API, whose shapes are
-documented at the top of `whatsapp/src/server.mjs`. Change both together.
+`client.ts` (`WhatsAppClient`) is the only way routes reach the engine, always
+with the caller's own session id. It imports `engine/` lazily so the protocol
+library never lands in a browser bundle. The engine keeps sockets in a
+`globalThis` registry (one per process — run a single app instance) and
+`src/instrumentation.ts` reconnects linked accounts at server start.
 
 `isSessionSendable(session)` is the one gate every send path checks before
 calling `sendText`/`sendImage`/`sendVideo`/`sendBulk`. `ensureSendable()`

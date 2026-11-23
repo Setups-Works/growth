@@ -43,8 +43,6 @@ jobs:
         run: docker build -t growth-app .
       - name: Build cron image
         run: docker build -t growth-cron docker/cron
-      - name: Build WhatsApp engine image
-        run: docker build -t growth-whatsapp whatsapp
 
   test:
     name: End-to-end

@@ -63,6 +63,13 @@ const nextConfig: NextConfig = {
    */
   output: "standalone",
 
+  /*
+   * The WhatsApp engine's protocol stack is loaded with Node's own require at
+   * runtime rather than bundled: it uses WebAssembly and dynamic imports that
+   * the bundler would break. Standalone output still traces and ships them.
+   */
+  serverExternalPackages: ["baileys", "libsignal", "whatsapp-rust-bridge"],
+
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

@@ -80,8 +80,8 @@ export default defineConfig({
           // "unavailable without a key" test pass or fail depending on whose
           // machine it ran on.
           GROQ_API_KEY: "",
-          WHATSAPP_ENGINE_URL: "",
-          WHATSAPP_ENGINE_KEY: "",
+          // No WhatsApp in the test run: nothing may link or message a phone.
+          WHATSAPP_DISABLED: "true",
         },
       },
 });

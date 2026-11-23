@@ -21,7 +21,7 @@ test("the API description is served", async ({ request }) => {
 test("the app shell renders", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.status()).toBeLessThan(400);
-  await expect(page).toHaveTitle(/Setups Works Growth/i);
+  await expect(page).toHaveTitle(/Growth by Setups Works/i);
 });
 
 test("settings answers without erroring", async ({ request }) => {

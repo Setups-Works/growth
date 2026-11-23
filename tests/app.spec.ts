@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test";
 
 test("the home page introduces the product and offers sign-in", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveTitle(/Setups Works Growth/i);
+  await expect(page).toHaveTitle(/Growth by Setups Works/i);
   await expect(page.getByRole("link", { name: /log in|sign in/i }).first()).toBeVisible();
 });
 

@@ -60,5 +60,3 @@ out/
 .env*.local
 # PUL-8: verifying PR-based dev linking to Jira, safe to ignore
 
-# WhatsApp engine dependencies
-whatsapp/node_modules

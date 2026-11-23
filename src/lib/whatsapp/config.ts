@@ -3,20 +3,16 @@ import { db } from "@/lib/db/client";
 /**
  * WhatsApp for one account.
  *
- * WhatsApp runs inside this deployment: the bundled engine (whatsapp/, the
- * `whatsapp` service in docker-compose.yml) holds one linked-device session per
- * account, which the account owner links by scanning a QR in Settings. There is
- * no gateway to configure — the engine's address and key come from the
- * environment, and an account's session id is simply its user id.
+ * WhatsApp runs inside this Next.js server: the engine (./engine) holds one
+ * linked-device session per account, which the account owner links by
+ * scanning a QR in Settings. There is nothing to configure — an account's
+ * session id is simply its user id. Set WHATSAPP_DISABLED=true to turn
+ * WhatsApp off for the whole deployment.
  *
  * What an account does configure is stored in `whatsapp_connections`, one row
  * per user: the default country code and the pace between sends.
  */
 export interface WhatsAppConfig {
-  /** The engine's internal URL (WHATSAPP_ENGINE_URL). */
-  baseUrl: string;
-  /** Shared key for the engine (WHATSAPP_ENGINE_KEY). Never leaves the server. */
-  apiKey: string;
   /** This account's engine session — its user id. */
   sessionId: string;
   /** Number last linked, remembered for display. */
@@ -37,16 +33,9 @@ export const MIN_SEND_DELAY_MS = 1000;
 /** Recipients per submitted batch — the engine rejects more than this. */
 export const MAX_BATCH_SIZE = 100;
 
-function engine(): { baseUrl: string; apiKey: string } | null {
-  const baseUrl = process.env.WHATSAPP_ENGINE_URL?.trim();
-  const apiKey = process.env.WHATSAPP_ENGINE_KEY?.trim();
-  if (!baseUrl || !apiKey) return null;
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
-}
-
-/** True when this deployment runs the WhatsApp engine at all. */
+/** True unless WhatsApp is switched off for this deployment. */
 export function whatsappAvailable(): boolean {
-  return engine() !== null;
+  return process.env.WHATSAPP_DISABLED !== "true";
 }
 
 function envDialCode(): string {
@@ -65,13 +54,12 @@ interface ConnectionRow {
 }
 
 /**
- * The account's WhatsApp configuration, or null when this deployment has no
- * engine. Non-null does not mean a number is linked — check the session
+ * The account's WhatsApp configuration, or null when WhatsApp is disabled on
+ * this deployment. Non-null does not mean a number is linked — check the session
  * (`isSessionSendable`) before sending.
  */
 export async function readWhatsAppConfig(userId: string): Promise<WhatsAppConfig | null> {
-  const e = engine();
-  if (!e) return null;
+  if (!whatsappAvailable()) return null;
 
   let row: ConnectionRow | undefined;
   try {
@@ -84,7 +72,6 @@ export async function readWhatsAppConfig(userId: string): Promise<WhatsAppConfig
   }
 
   return {
-    ...e,
     sessionId: userId,
     phone: row?.phone ?? undefined,
     defaultDialCode: (row?.dial_code ?? "").replace(/\D/g, "") || envDialCode(),
@@ -118,7 +105,7 @@ export async function clearWhatsAppConfig(userId: string): Promise<void> {
   await db()`delete from whatsapp_connections where user_id = ${userId}`;
 }
 
-/** What the settings page may see. The engine key never reaches a browser. */
+/** What the settings page may see. */
 export function redactWhatsAppConfig(config: WhatsAppConfig | null) {
   if (!config) return null;
   return {

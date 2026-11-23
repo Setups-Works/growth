@@ -1,11 +1,9 @@
+import type { MenuConfig, MenuOption } from "../menu";
+
 /**
- * The `chat-flow` menu bot, running inside the engine so it answers at any
- * hour whether or not the web app is up.
+ * The `chat-flow` menu bot: answers inbound messages from the menu configured
+ * on the Auto-reply screen, at any hour, while the server is running.
  *
- * Config shape (edited in the app's Menu screen, src/lib/whatsapp/menu.ts):
- *   { trigger, greeting, options: [{ key, text, options? }], respondInGroups }
- *
- * Behaviour:
  *   - A message that is exactly the trigger (case-insensitive) opens the menu
  *     and gets the greeting. An empty trigger matches any text message.
  *   - While a menu is open, a reply equal to one of the current options' keys
@@ -16,20 +14,13 @@
  *     "1" the next day is never read as a menu choice.
  */
 
-export const PLUGIN_ID = "chat-flow";
 const STATE_TTL_MS = 15 * 60 * 1000;
 
 export class MenuBot {
-  constructor() {
-    /** chatId -> { path: number[], expires: number } */
-    this.state = new Map();
-  }
+  private state = new Map<string, { path: number[]; expires: number }>();
 
-  /**
-   * Decides the reply to an inbound text, or null for "not ours".
-   * `config` is the saved plugin config; the caller checks it is enabled.
-   */
-  reply(config, chatId, text, isGroup) {
+  /** The reply to an inbound text, or null for "not ours". */
+  reply(config: MenuConfig | null, chatId: string, text: string, isGroup: boolean): string | null {
     if (!config || !Array.isArray(config.options) || !config.greeting) return null;
     if (isGroup && !config.respondInGroups) return null;
 
@@ -37,7 +28,6 @@ export class MenuBot {
     if (!input) return null;
     const now = Date.now();
 
-    // Sweep expired conversations occasionally so the map can't grow forever.
     if (this.state.size > 5000) {
       for (const [k, v] of this.state) if (v.expires < now) this.state.delete(k);
     }
@@ -70,15 +60,13 @@ export class MenuBot {
     return null;
   }
 
-  reset() {
+  reset(): void {
     this.state.clear();
   }
 }
 
-function optionsAt(options, path) {
+function optionsAt(options: MenuOption[], path: number[]): MenuOption[] {
   let list = options;
-  for (const i of path) {
-    list = list[i]?.options ?? [];
-  }
+  for (const i of path) list = list[i]?.options ?? [];
   return list;
 }

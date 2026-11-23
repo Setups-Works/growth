@@ -9,4 +9,4 @@ tests
 test-results
 playwright-report
 docker-compose*.yml
-whatsapp
+.data

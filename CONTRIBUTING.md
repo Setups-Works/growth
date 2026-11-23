@@ -38,9 +38,8 @@ optional reading.
 - **New routes need an OpenAPI entry in the same commit.**
   `scripts/check-openapi.mjs` fails CI otherwise. Point the agent at
   `src/lib/openapi.ts` and an existing route of the same shape.
-- **WhatsApp is the bundled engine in `whatsapp/`.** Its HTTP API
-  (`whatsapp/src/server.mjs`) and the app's client
-  (`src/lib/whatsapp/client.ts`) change together; see
+- **WhatsApp runs inside the app** (`src/lib/whatsapp/engine`), reached only
+  through `WhatsAppClient` in `src/lib/whatsapp/client.ts`; see
   `src/lib/whatsapp/CLAUDE.md`.
 - **Anything that can message a real phone number needs a human in the
   loop.** Test sends go to one established test number, never a number read

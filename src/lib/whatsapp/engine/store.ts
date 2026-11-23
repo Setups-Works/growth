@@ -1,42 +1,36 @@
+import { db } from "@/lib/db/client";
+import type { WhatsAppChat, WhatsAppMessage } from "../client";
+
 /**
- * PostgreSQL access for the engine: the message log behind the inbox, and
- * per-session plugin configuration. Tables are created by the app's
- * migrations (db/migrations/0002_whatsapp_engine.sql).
+ * The engine's tables (db/migrations/0002_whatsapp_engine.sql): the message
+ * log behind the inbox, and per-account plugin configuration (the menu bot).
+ * Every function takes the account's session id — its user id — explicitly.
  */
-import postgres from "postgres";
 
-let sql = null;
-
-export function db() {
-  if (sql) return sql;
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set.");
-  sql = postgres(url, { max: 5, idle_timeout: 300, onnotice: () => {} });
-  return sql;
+export interface StoredMessage {
+  id: string;
+  chatId: string;
+  fromMe: boolean;
+  sender: string | null;
+  pushName: string | null;
+  type: string;
+  body: string;
+  timestamp: number;
+  status: string | null;
 }
 
-export async function saveMessage(sessionId, m) {
+export async function saveMessage(sessionId: string, m: StoredMessage): Promise<void> {
   await db()`
     insert into wa_messages (session_id, wa_message_id, chat_id, from_me, sender, push_name, type, body, "timestamp", status)
-    values (${sessionId}, ${m.id}, ${m.chatId}, ${m.fromMe}, ${m.sender ?? null}, ${m.pushName ?? null},
-            ${m.type}, ${m.body}, ${m.timestamp}, ${m.status ?? null})
+    values (${sessionId}, ${m.id}, ${m.chatId}, ${m.fromMe}, ${m.sender}, ${m.pushName},
+            ${m.type}, ${m.body}, ${m.timestamp}, ${m.status})
     on conflict (session_id, wa_message_id) do update set
       status = coalesce(excluded.status, wa_messages.status),
       body = case when excluded.body <> '' then excluded.body else wa_messages.body end
   `;
 }
 
-export async function saveMessages(sessionId, list) {
-  for (const m of list) {
-    try {
-      await saveMessage(sessionId, m);
-    } catch (error) {
-      console.error(`[store] could not save message ${m.id}:`, error.message);
-    }
-  }
-}
-
-export async function updateStatus(sessionId, waMessageId, status) {
+export async function updateStatus(sessionId: string, waMessageId: string, status: string): Promise<void> {
   await db()`
     update wa_messages set status = ${status}
     where session_id = ${sessionId} and wa_message_id = ${waMessageId}
@@ -44,8 +38,10 @@ export async function updateStatus(sessionId, waMessageId, status) {
 }
 
 /** Conversations, newest first, derived from the message log. */
-export async function listChats(sessionId, limit) {
-  const rows = await db()`
+export async function listChats(sessionId: string, limit: number): Promise<WhatsAppChat[]> {
+  const rows = await db()<
+    { chat_id: string; body: string; timestamp: string; type: string; push_name: string | null; unread: number }[]
+  >`
     with latest as (
       select distinct on (chat_id) chat_id, body, "timestamp", type
       from wa_messages where session_id = ${sessionId}
@@ -81,8 +77,20 @@ export async function listChats(sessionId, limit) {
 }
 
 /** One conversation's messages, oldest first (the order the inbox renders). */
-export async function listMessages(sessionId, chatId, limit) {
-  const rows = await db()`
+export async function listMessages(sessionId: string, chatId: string, limit: number): Promise<WhatsAppMessage[]> {
+  const rows = await db()<
+    {
+      wa_message_id: string;
+      chat_id: string;
+      from_me: boolean;
+      sender: string | null;
+      body: string;
+      type: string;
+      timestamp: string;
+      status: string | null;
+      created_at: Date;
+    }[]
+  >`
     select * from (
       select * from wa_messages
       where session_id = ${sessionId} and chat_id = ${chatId}
@@ -104,29 +112,32 @@ export async function listMessages(sessionId, chatId, limit) {
   }));
 }
 
-export async function readPlugin(sessionId, pluginId) {
-  const [row] = await db()`
-    select config, enabled, updated_at from wa_plugins
+export async function readPlugin(
+  sessionId: string,
+  pluginId: string,
+): Promise<{ config: Record<string, unknown>; enabled: boolean } | null> {
+  const [row] = await db()<{ config: Record<string, unknown>; enabled: boolean }[]>`
+    select config, enabled from wa_plugins
     where session_id = ${sessionId} and plugin_id = ${pluginId}
   `;
   return row ?? null;
 }
 
-export async function writePluginConfig(sessionId, pluginId, config) {
+export async function writePluginConfig(sessionId: string, pluginId: string, config: unknown): Promise<void> {
   await db()`
-    insert into wa_plugins (session_id, plugin_id, config) values (${sessionId}, ${pluginId}, ${db().json(config)})
+    insert into wa_plugins (session_id, plugin_id, config) values (${sessionId}, ${pluginId}, ${db().json(config as never)})
     on conflict (session_id, plugin_id) do update set config = excluded.config, updated_at = now()
   `;
 }
 
-export async function writePluginEnabled(sessionId, pluginId, enabled) {
+export async function writePluginEnabled(sessionId: string, pluginId: string, enabled: boolean): Promise<void> {
   await db()`
     insert into wa_plugins (session_id, plugin_id, enabled) values (${sessionId}, ${pluginId}, ${enabled})
     on conflict (session_id, plugin_id) do update set enabled = excluded.enabled, updated_at = now()
   `;
 }
 
-export async function deleteSessionData(sessionId) {
+export async function deleteSessionData(sessionId: string): Promise<void> {
   await db()`delete from wa_messages where session_id = ${sessionId}`;
   await db()`delete from wa_plugins where session_id = ${sessionId}`;
 }

@@ -1,15 +1,3 @@
-/**
- * One WhatsApp linked device per account.
- *
- * Built on Baileys (the WhatsApp Web multi-device protocol): the account owner
- * scans a QR in the app, exactly as with "Linked devices" on WhatsApp Web, and
- * this process holds the socket from then on. Pairing credentials are kept on
- * the engine's volume, so a restart reconnects the same number without a new
- * scan.
- *
- * Status values match what the app has always understood:
- *   created → initializing → qr_ready → ready, and disconnected.
- */
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,72 +10,111 @@ import makeWASocket, {
   isPnUser,
   jidNormalizedUser,
   makeCacheableSignalKeyStore,
-  useMultiFileAuthState,
+  // Aliased: a plain function, not a React hook, despite the `use` prefix.
+  useMultiFileAuthState as multiFileAuthState,
+  type ConnectionState,
+  type WAMessage,
+  type WAMessageUpdate,
+  type WASocket,
 } from "baileys";
 import pino from "pino";
 import QRCode from "qrcode";
-import { MenuBot, PLUGIN_ID } from "./menu-bot.mjs";
-import * as store from "./store.mjs";
+import type { BulkMessageItem, BulkOptions, WhatsAppSession } from "../client";
+import type { MenuConfig } from "../menu";
+import { WhatsAppApiError } from "./errors";
+import { MenuBot } from "./menu-bot";
+import * as store from "./store";
 
+/**
+ * One WhatsApp linked device per account, held inside this Next.js server.
+ *
+ * Built on Baileys (the WhatsApp Web multi-device protocol): the account owner
+ * scans a QR in Settings, exactly as with "Linked devices" on WhatsApp Web, and
+ * this process holds the socket from then on. Pairing credentials live under
+ * WHATSAPP_DATA_DIR (a Docker volume in production), so a restart reconnects
+ * the same number without a new scan.
+ *
+ * Status values: created → initializing → qr_ready → ready, and disconnected.
+ */
+
+export const MENU_PLUGIN_ID = "chat-flow";
 const logger = pino({ level: process.env.BAILEYS_LOG_LEVEL ?? "warn" });
-const DATA_DIR = process.env.WA_DATA_DIR ?? "/data/sessions";
 /** WhatsApp offers a handful of QR codes per attempt; after that we stop until asked again. */
 const MAX_QR_ROUNDS = 6;
+const STATUS_NAMES: Record<number, string> = { 0: "error", 1: "pending", 2: "sent", 3: "delivered", 4: "read", 5: "played" };
 
-let cachedVersion = null;
-async function waVersion() {
-  if (cachedVersion) return cachedVersion;
+export function dataDir(): string {
+  return process.env.WHATSAPP_DATA_DIR ?? join(/*turbopackIgnore: true*/ process.cwd(), ".data", "whatsapp");
+}
+
+let cachedVersion: [number, number, number] | undefined | null = null;
+async function waVersion(): Promise<[number, number, number] | undefined> {
+  if (cachedVersion !== null) return cachedVersion;
   try {
-    const { version } = await fetchLatestBaileysVersion();
-    cachedVersion = version;
+    cachedVersion = (await fetchLatestBaileysVersion()).version;
   } catch {
     cachedVersion = undefined; // Baileys falls back to its bundled version.
   }
   return cachedVersion;
 }
 
-const STATUS_NAMES = { 0: "error", 1: "pending", 2: "sent", 3: "delivered", 4: "read", 5: "played" };
+interface Batch {
+  batchId: string;
+  status: "queued" | "processing" | "completed" | "cancelled";
+  total: number;
+  sent: number;
+  failed: number;
+  cancelled: boolean;
+  results: { chatId: string; success: boolean; messageId?: string | null; error?: string }[];
+  createdAt: string;
+  completedAt: string | null;
+}
+
+interface Normalised extends store.StoredMessage {
+  isGroup: boolean;
+  replyJid: string;
+}
 
 export class Session {
-  constructor(id) {
-    this.id = id;
-    this.dir = join(DATA_DIR, id);
-    this.sock = null;
-    this.status = "created";
-    this.qr = null;
-    this.qrRounds = 0;
-    this.phone = null;
-    this.pushName = null;
-    this.connectedAt = null;
-    this.lastActive = null;
-    this.lastError = null;
-    this.stopping = false;
-    this.reconnectTimer = null;
-    this.reconnectAttempts = 0;
-    this.menu = new MenuBot();
-    this.menuConfig = null;
-    this.batches = new Map();
-    this.sendChain = Promise.resolve();
+  readonly dir: string;
+  sock: WASocket | null = null;
+  status = "created";
+  qr: string | null = null;
+  private qrRounds = 0;
+  phone: string | null = null;
+  pushName: string | null = null;
+  connectedAt: string | null = null;
+  lastActive: string | null = null;
+  lastError: string | null = null;
+  private stopping = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private menu = new MenuBot();
+  private menuConfig: MenuConfig | null = null;
+  private batches = new Map<string, Batch>();
+  private sendChain: Promise<void> = Promise.resolve();
+
+  constructor(readonly id: string) {
+    this.dir = join(/*turbopackIgnore: true*/ dataDir(), id);
   }
 
-  /** Whether this account has ever completed a pairing (credentials on disk). */
-  hasCredentials() {
-    return existsSync(join(this.dir, "creds.json"));
+  hasCredentials(): boolean {
+    return existsSync(join(/*turbopackIgnore: true*/ this.dir, "creds.json"));
   }
 
   /** Reads the last-linked number from saved credentials, without connecting. */
-  async loadIdentity() {
+  async loadIdentity(): Promise<void> {
     try {
-      const creds = JSON.parse(await readFile(join(this.dir, "creds.json"), "utf8"));
-      if (creds?.me?.id) this.phone = creds.me.id.split(":")[0].split("@")[0];
+      const creds = JSON.parse(await readFile(join(/*turbopackIgnore: true*/ this.dir, "creds.json"), "utf8"));
+      if (creds?.me?.id && creds.registered !== false) this.phone = String(creds.me.id).split(":")[0].split("@")[0];
       if (creds?.me?.name) this.pushName = creds.me.name;
-      if (creds?.registered === false) this.phone = null;
+      if (this.hasCredentials()) this.status = "disconnected";
     } catch {
       /* no credentials yet */
     }
   }
 
-  toJSON() {
+  toJSON(): WhatsAppSession {
     return {
       id: this.id,
       name: this.pushName ?? this.id,
@@ -101,21 +128,21 @@ export class Session {
     };
   }
 
-  async start() {
+  async start(): Promise<void> {
     if (this.sock) return; // already running (initializing, qr_ready or ready)
-    clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.stopping = false;
     this.status = "initializing";
     this.lastError = null;
     this.qr = null;
     await this.reloadPlugins();
 
-    const { state, saveCreds } = await useMultiFileAuthState(this.dir);
+    const { state, saveCreds } = await multiFileAuthState(this.dir);
     const sock = makeWASocket({
       version: await waVersion(),
       auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
       logger,
-      browser: Browsers.macOS("Setups Works Growth"),
+      browser: Browsers.macOS("Growth by Setups Works"),
       markOnlineOnConnect: false, // keep notifications on the owner's phone
       syncFullHistory: false,
       getMessage: async () => undefined,
@@ -123,20 +150,19 @@ export class Session {
     this.sock = sock;
 
     sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("connection.update", (update) => void this.onConnection(sock, update, state));
-    sock.ev.on("messages.upsert", (event) => void this.onMessages(sock, event));
+    sock.ev.on("connection.update", (update) => void this.onConnection(sock, update, () => Boolean(state.creds.registered)));
+    sock.ev.on("messages.upsert", (event) => void this.onMessages(sock, event.messages, event.type));
     sock.ev.on("messages.update", (updates) => void this.onMessageUpdates(updates));
-    sock.ev.on("messaging-history.set", (event) => void this.onHistory(sock, event));
+    sock.ev.on("messaging-history.set", (event) => void this.onHistory(sock, event.messages));
   }
 
-  async onConnection(sock, update, state) {
+  private async onConnection(sock: WASocket, update: Partial<ConnectionState>, registered: () => boolean): Promise<void> {
     if (sock !== this.sock) return; // an old socket's late event
 
     if (update.qr) {
       this.qrRounds++;
       if (this.qrRounds > MAX_QR_ROUNDS) {
-        // Nobody is scanning. Stop rather than offering codes forever; the app
-        // starts a fresh attempt when the user opens the QR panel again.
+        // Nobody is scanning. Stop rather than offering codes forever.
         this.lastError = "QR code expired. Start linking again.";
         await this.stop();
         return;
@@ -153,14 +179,13 @@ export class Session {
       this.connectedAt = new Date().toISOString();
       this.lastActive = this.connectedAt;
       this.lastError = null;
-      const me = sock.user;
-      if (me?.id) this.phone = me.id.split(":")[0].split("@")[0];
-      if (me?.name) this.pushName = me.name;
-      console.log(`[session ${this.id}] connected as ${this.phone}`);
+      if (sock.user?.id) this.phone = sock.user.id.split(":")[0].split("@")[0];
+      if (sock.user?.name) this.pushName = sock.user.name;
+      console.log(`[whatsapp ${this.id}] connected`);
     }
 
     if (update.connection === "close") {
-      const code = update.lastDisconnect?.error?.output?.statusCode;
+      const code = (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
       this.sock = null;
       this.qr = null;
 
@@ -171,7 +196,6 @@ export class Session {
 
       if (code === DisconnectReason.loggedOut || code === DisconnectReason.forbidden) {
         // Unlinked from the phone (or banned). The credentials are dead.
-        console.log(`[session ${this.id}] logged out (${code})`);
         this.status = "disconnected";
         this.phone = null;
         this.lastError = "This device was unlinked from WhatsApp. Scan a new QR code to link again.";
@@ -179,8 +203,7 @@ export class Session {
         return;
       }
 
-      const neverLinked = !state.creds.registered;
-      if (neverLinked && code !== DisconnectReason.restartRequired) {
+      if (!registered() && code !== DisconnectReason.restartRequired) {
         // A pairing attempt that ended without a scan.
         this.status = "disconnected";
         this.lastError = this.lastError ?? "Linking was not completed. Start again to get a new QR code.";
@@ -189,23 +212,24 @@ export class Session {
 
       // Transient (network, restart-after-pairing, replaced connection): reconnect.
       this.status = "initializing";
-      const delay = code === DisconnectReason.restartRequired ? 0 : Math.min(30_000, 2000 * 2 ** this.reconnectAttempts++);
+      const delay =
+        code === DisconnectReason.restartRequired ? 0 : Math.min(30_000, 2000 * 2 ** this.reconnectAttempts++);
       this.lastError = code ? `Connection closed (${code}); reconnecting.` : null;
       this.reconnectTimer = setTimeout(() => void this.start().catch((e) => this.fail(e)), delay);
     }
   }
 
-  fail(error) {
-    console.error(`[session ${this.id}]`, error);
+  fail(error: unknown): void {
+    console.error(`[whatsapp ${this.id}]`, error);
     this.sock = null;
     this.status = "disconnected";
-    this.lastError = error?.message ?? String(error);
+    this.lastError = error instanceof Error ? error.message : String(error);
   }
 
   /** Stops the socket but keeps the pairing, so start() reconnects without a QR. */
-  async stop() {
+  async stop(): Promise<void> {
     this.stopping = true;
-    clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     const sock = this.sock;
     this.sock = null;
     this.qr = null;
@@ -219,9 +243,9 @@ export class Session {
   }
 
   /** Unlinks the device from WhatsApp and forgets everything about it. */
-  async logout() {
+  async logout(): Promise<void> {
     this.stopping = true;
-    clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     try {
       await this.sock?.logout();
     } catch {
@@ -245,15 +269,15 @@ export class Session {
   // ── Addressing ──────────────────────────────────────────────────────────
 
   /** The app's chat id ("<digits>@c.us") → a Baileys JID. */
-  toJid(chatId) {
+  toJid(chatId: string): string {
     const value = String(chatId).trim();
     if (value.endsWith("@c.us")) return `${value.slice(0, -5)}@s.whatsapp.net`;
     if (value.includes("@")) return value;
     return `${value.replace(/\D/g, "")}@s.whatsapp.net`;
   }
 
-  /** A Baileys JID → the app's chat id, preferring phone-number form. */
-  async toChatId(sock, jid, alt) {
+  /** A Baileys JID → the app's chat id, preferring phone-number form over LID. */
+  private async toChatId(sock: WASocket | null, jid: string, alt?: string | null): Promise<string> {
     let value = jid;
     if (isLidUser(value)) {
       if (alt && isPnUser(alt)) value = alt;
@@ -268,9 +292,9 @@ export class Session {
 
   // ── Inbound ─────────────────────────────────────────────────────────────
 
-  async normalise(sock, msg) {
+  private async normalise(sock: WASocket | null, msg: WAMessage): Promise<Normalised | null> {
     const remote = msg.key?.remoteJid;
-    if (!remote || remote === "status@broadcast" || !msg.message) return null;
+    if (!remote || remote === "status@broadcast" || !msg.message || !msg.key.id) return null;
 
     const { type, body } = describe(msg.message);
     if (!type) return null; // reactions, protocol messages, receipts
@@ -279,62 +303,60 @@ export class Session {
     const participant = msg.key.participant
       ? await this.toChatId(sock, msg.key.participant, msg.key.participantAlt)
       : null;
-    const ts = Number(msg.messageTimestamp ?? Math.floor(Date.now() / 1000));
+    const fromMe = Boolean(msg.key.fromMe);
 
     return {
       id: msg.key.id,
       chatId,
-      fromMe: Boolean(msg.key.fromMe),
-      sender: msg.key.fromMe ? null : (participant ?? chatId),
-      pushName: msg.key.fromMe ? null : (msg.pushName ?? null),
+      fromMe,
+      sender: fromMe ? null : (participant ?? chatId),
+      pushName: fromMe ? null : (msg.pushName ?? null),
       type,
       body,
-      timestamp: ts,
-      status: msg.key.fromMe ? (STATUS_NAMES[msg.status] ?? "sent") : null,
+      timestamp: Number(msg.messageTimestamp ?? Math.floor(Date.now() / 1000)),
+      status: fromMe ? (STATUS_NAMES[msg.status ?? 2] ?? "sent") : null,
       isGroup: Boolean(isJidGroup(remote)),
       replyJid: remote,
     };
   }
 
-  async onMessages(sock, { messages, type }) {
+  private async onMessages(sock: WASocket, messages: WAMessage[], type: string): Promise<void> {
     for (const msg of messages) {
       const m = await this.normalise(sock, msg);
       if (!m) continue;
       this.lastActive = new Date().toISOString();
-      await store.saveMessage(this.id, m).catch((e) => console.error("[store]", e.message));
+      await store.saveMessage(this.id, m).catch((e) => console.error("[whatsapp store]", e.message));
 
       if (type === "notify" && !m.fromMe && m.type === "text") {
-        await this.runMenuBot(m).catch((e) => console.error(`[menu ${this.id}]`, e.message));
+        await this.runMenuBot(m).catch((e) => console.error(`[whatsapp menu ${this.id}]`, e.message));
       }
     }
   }
 
-  async onMessageUpdates(updates) {
+  private async onMessageUpdates(updates: WAMessageUpdate[]): Promise<void> {
     for (const { key, update } of updates) {
-      if (key?.id && typeof update?.status === "number" && STATUS_NAMES[update.status]) {
-        await store.updateStatus(this.id, key.id, STATUS_NAMES[update.status]).catch(() => {});
+      const status = update?.status;
+      if (key?.id && typeof status === "number" && STATUS_NAMES[status]) {
+        await store.updateStatus(this.id, key.id, STATUS_NAMES[status]).catch(() => {});
       }
     }
   }
 
-  async onHistory(sock, { messages }) {
+  private async onHistory(sock: WASocket, messages: WAMessage[]): Promise<void> {
     // Recent history only, so the inbox has context without importing years.
-    const recent = messages.slice(-2000);
-    const list = [];
-    for (const msg of recent) {
+    for (const msg of messages.slice(-2000)) {
       const m = await this.normalise(sock, msg);
-      if (m) list.push(m);
+      if (m) await store.saveMessage(this.id, m).catch(() => {});
     }
-    await store.saveMessages(this.id, list);
   }
 
-  async reloadPlugins() {
-    const row = await store.readPlugin(this.id, PLUGIN_ID).catch(() => null);
-    this.menuConfig = row?.enabled ? row.config : null;
+  async reloadPlugins(): Promise<void> {
+    const row = await store.readPlugin(this.id, MENU_PLUGIN_ID).catch(() => null);
+    this.menuConfig = row?.enabled ? (row.config as unknown as MenuConfig) : null;
     this.menu.reset();
   }
 
-  async runMenuBot(m) {
+  private async runMenuBot(m: Normalised): Promise<void> {
     if (!this.menuConfig) return;
     const text = this.menu.reply(this.menuConfig, m.chatId, m.body, m.isGroup);
     if (!text) return;
@@ -344,60 +366,62 @@ export class Session {
 
   // ── Outbound ────────────────────────────────────────────────────────────
 
-  requireReady() {
+  private requireReady(endpoint: string): WASocket {
     if (!this.sock || this.status !== "ready") {
-      const error = new Error("Session is not active. Link WhatsApp in Settings first.");
-      error.status = 409;
-      throw error;
+      throw new WhatsAppApiError("Session is not active. Link WhatsApp in Settings first.", 409, endpoint);
     }
+    return this.sock;
   }
 
-  async deliver(jid, content) {
-    this.requireReady();
-    const sent = await this.sock.sendMessage(jid, content);
+  private async deliver(jid: string, content: Parameters<WASocket["sendMessage"]>[1]) {
+    const sock = this.requireReady("send");
+    const sent = await sock.sendMessage(jid, content);
     this.lastActive = new Date().toISOString();
     if (sent) {
-      const m = await this.normalise(this.sock, sent);
+      const m = await this.normalise(sock, sent);
       if (m) await store.saveMessage(this.id, m).catch(() => {});
     }
     return {
-      messageId: sent?.key?.id ?? null,
+      messageId: sent?.key?.id ?? "",
       timestamp: Number(sent?.messageTimestamp ?? Math.floor(Date.now() / 1000)),
     };
   }
 
-  sendText(chatId, text) {
-    return this.deliver(this.toJid(chatId), { text: String(text ?? "") });
+  sendText(chatId: string, text: string) {
+    return this.deliver(this.toJid(chatId), { text });
   }
 
-  sendImage(chatId, url, caption) {
+  sendImage(chatId: string, url: string, caption?: string) {
     return this.deliver(this.toJid(chatId), { image: { url }, caption: caption || undefined });
   }
 
-  sendVideo(chatId, url, caption) {
+  sendVideo(chatId: string, url: string, caption?: string) {
     return this.deliver(this.toJid(chatId), { video: { url }, caption: caption || undefined });
   }
 
-  async checkNumber(number) {
-    this.requireReady();
+  async checkNumber(number: string) {
+    const sock = this.requireReady("contacts/check");
     const digits = String(number).replace(/\D/g, "");
-    const [result] = (await this.sock.onWhatsApp(digits)) ?? [];
+    const [result] = (await sock.onWhatsApp(digits)) ?? [];
     return {
       number: digits,
       exists: Boolean(result?.exists),
-      whatsappId: result?.exists ? await this.toChatId(this.sock, result.jid) : null,
+      whatsappId: result?.exists ? await this.toChatId(sock, result.jid) : null,
     };
   }
 
   /**
    * Accepts a batch and works through it in the background, one message at a
-   * time with the requested pacing. Batches on the same session queue behind
+   * time with the requested pacing. Batches on the same account queue behind
    * each other, so two broadcasts never interleave sends.
    */
-  sendBulk(messages, options = {}, batchId) {
-    this.requireReady();
+  sendBulk(messages: BulkMessageItem[], options: BulkOptions = {}, batchId?: string) {
+    this.requireReady("send-bulk");
+    if (messages.length === 0) throw new WhatsAppApiError("messages must be a non-empty array.", 400, "send-bulk");
+    if (messages.length > 100) throw new WhatsAppApiError("At most 100 messages per batch.", 400, "send-bulk");
+
     const id = batchId || `batch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    const batch = {
+    const batch: Batch = {
       batchId: id,
       status: "queued",
       total: messages.length,
@@ -409,7 +433,10 @@ export class Session {
       completedAt: null,
     };
     this.batches.set(id, batch);
-    if (this.batches.size > 200) this.batches.delete(this.batches.keys().next().value);
+    if (this.batches.size > 200) {
+      const oldest = this.batches.keys().next().value;
+      if (oldest) this.batches.delete(oldest);
+    }
 
     const delay = Math.max(1000, Number(options.delayBetweenMessages) || 4000);
     const jitter = options.randomizeDelay !== false;
@@ -425,7 +452,7 @@ export class Session {
           batch.results.push({ chatId: item.chatId, success: true, messageId: result.messageId });
         } catch (error) {
           batch.failed++;
-          batch.results.push({ chatId: item.chatId, success: false, error: error.message });
+          batch.results.push({ chatId: item.chatId, success: false, error: (error as Error).message });
           if (options.stopOnError) break;
         }
         if (i < messages.length - 1 && !batch.cancelled) {
@@ -439,27 +466,29 @@ export class Session {
     return { batchId: id, status: batch.status, total: batch.total };
   }
 
-  sendBulkItem(item) {
-    const content = item.content ?? {};
+  private sendBulkItem(item: BulkMessageItem) {
+    const content = item.content as {
+      text?: string;
+      caption?: string;
+      url?: string;
+      image?: { url?: string };
+      video?: { url?: string };
+    };
     const caption = content.caption ?? content.text;
-    switch (item.type) {
-      case "image":
-        return this.sendImage(item.chatId, content.image?.url ?? content.url, caption);
-      case "video":
-        return this.sendVideo(item.chatId, content.video?.url ?? content.url, caption);
-      default:
-        return this.sendText(item.chatId, content.text ?? "");
-    }
+    if (item.type === "image") return this.sendImage(item.chatId, content.image?.url ?? content.url ?? "", caption);
+    if (item.type === "video") return this.sendVideo(item.chatId, content.video?.url ?? content.url ?? "", caption);
+    return this.sendText(item.chatId, content.text ?? "");
   }
 
-  getBatch(id) {
+  getBatch(id: string) {
     const batch = this.batches.get(id);
     if (!batch) return null;
     const { cancelled: _cancelled, ...rest } = batch;
+    void _cancelled;
     return { ...rest, pending: batch.total - batch.sent - batch.failed };
   }
 
-  cancelBatch(id) {
+  cancelBatch(id: string) {
     const batch = this.batches.get(id);
     if (!batch) return null;
     batch.cancelled = true;
@@ -467,28 +496,30 @@ export class Session {
   }
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type MessageContent = NonNullable<WAMessage["message"]>;
+
 /** The message's kind and its readable text, or a null type for non-messages. */
-function describe(message) {
-  const m = message.ephemeralMessage?.message ?? message.viewOnceMessage?.message ?? message;
+function describe(message: MessageContent): { type: string | null; body: string } {
+  const m: MessageContent = message.ephemeralMessage?.message ?? message.viewOnceMessage?.message ?? message;
   if (m.conversation) return { type: "text", body: m.conversation };
   if (m.extendedTextMessage) return { type: "text", body: m.extendedTextMessage.text ?? "" };
   if (m.imageMessage) return { type: "image", body: m.imageMessage.caption ?? "" };
   if (m.videoMessage) return { type: "video", body: m.videoMessage.caption ?? "" };
   if (m.audioMessage) return { type: "audio", body: "" };
   if (m.documentMessage) return { type: "document", body: m.documentMessage.fileName ?? m.documentMessage.caption ?? "" };
-  if (m.documentWithCaptionMessage?.message?.documentMessage) {
-    const d = m.documentWithCaptionMessage.message.documentMessage;
-    return { type: "document", body: d.caption ?? d.fileName ?? "" };
-  }
+  const docWithCaption = m.documentWithCaptionMessage?.message?.documentMessage;
+  if (docWithCaption) return { type: "document", body: docWithCaption.caption ?? docWithCaption.fileName ?? "" };
   if (m.stickerMessage) return { type: "sticker", body: "" };
   if (m.locationMessage) return { type: "location", body: m.locationMessage.name ?? m.locationMessage.address ?? "" };
   if (m.contactMessage) return { type: "contact", body: m.contactMessage.displayName ?? "" };
   if (m.buttonsResponseMessage) return { type: "text", body: m.buttonsResponseMessage.selectedDisplayText ?? "" };
   if (m.listResponseMessage) return { type: "text", body: m.listResponseMessage.title ?? "" };
-  if (m.templateButtonReplyMessage) return { type: "text", body: m.templateButtonReplyMessage.selectedDisplayText ?? "" };
+  if (m.templateButtonReplyMessage) {
+    return { type: "text", body: m.templateButtonReplyMessage.selectedDisplayText ?? "" };
+  }
   return { type: null, body: "" };
 }
