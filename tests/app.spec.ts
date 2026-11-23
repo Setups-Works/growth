@@ -31,7 +31,8 @@ test("signed out, the dashboard redirects to sign-in", async ({ page }) => {
 test("a new account lands on the connect form, which refuses a plainly invalid URL", async ({ page }) => {
   const res = await page.request.post("/api/auth/signup", {
     data: {
-      name: "E2E Tester",
+      // Names are letters only (src/lib/auth/fields.ts), so no "E2E" here.
+      name: "Eve Tester",
       email: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`,
       phone: "9876543210",
       password: "e2e-password-1",
