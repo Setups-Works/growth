@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { optOutIntent, spin, warmupLimit } from "@/lib/whatsapp/engine/guard";
+// Static imports on purpose: on Node 22 a module loaded with `await import()`
+// inside a test cannot resolve its own "@/..." imports.
+import { db } from "@/lib/db/client";
+import { WhatsAppApiError } from "@/lib/whatsapp/engine/errors";
+import { optOutIntent, SendGuard, spin, warmupLimit } from "@/lib/whatsapp/engine/guard";
 
 /**
  * The rules behind safe sending (src/lib/whatsapp/engine/guard.ts). These
@@ -32,7 +36,6 @@ test("STOP and START replies are recognised, ordinary messages are not", () => {
 
 test("replies jump ahead of queued messages, and sends never overlap", async () => {
   test.setTimeout(30_000);
-  const { SendGuard } = await import("@/lib/whatsapp/engine/guard");
   const guard = new SendGuard("test-session");
   const order: string[] = [];
   let running = 0;
@@ -63,9 +66,6 @@ test("replies jump ahead of queued messages, and sends never overlap", async () 
 
 test("at the daily limit, marketing is refused but order confirmations still go out", async () => {
   test.skip(!process.env.DATABASE_URL, "needs a test database");
-  const { db } = await import("@/lib/db/client");
-  const { SendGuard } = await import("@/lib/whatsapp/engine/guard");
-  const { WhatsAppApiError } = await import("@/lib/whatsapp/engine/errors");
 
   // A number linked 40 days ago (warm-up over), limit 10/day, already at 10.
   const [user] = await db()<{ id: string }[]>`

@@ -1,6 +1,10 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, test } from "@playwright/test";
+// Static imports on purpose: on Node 22 a module loaded with `await import()`
+// inside a test cannot resolve its own "@/..." imports.
+import { db } from "@/lib/db/client";
+import { syncStore } from "@/lib/woo/sync";
 
 /**
  * The WooCommerce sync, end to end against a fake store and a real database.
@@ -69,8 +73,6 @@ function fakeStore() {
 test("a first sync fetches products, then orders, then customers — and saves all of them", async () => {
   test.skip(!process.env.DATABASE_URL, "needs a test database");
   test.setTimeout(120_000);
-  const { db } = await import("@/lib/db/client");
-  const { syncStore } = await import("@/lib/woo/sync");
   const store = await fakeStore();
 
   try {
