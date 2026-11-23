@@ -1717,6 +1717,7 @@ npm run build                  # production build
 npm run lint                   # eslint
 npm run typecheck              # tsc --noEmit
 npm test                       # Playwright end-to-end suite
+BASE_URL=https://your.domain npm run test:smoke   # check a live deployment
 ```
 
 ### Database migrations

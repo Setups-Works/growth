@@ -8,13 +8,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "playwright test",
-    "test:ui": "playwright test --ui",
+    "test": "playwright test --project=chromium",
+    "test:ui": "playwright test --project=chromium --ui",
     "test:report": "playwright show-report",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node scripts/migrate.mjs",
     "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "test:smoke": "playwright test --project=smoke"
   },
   "dependencies": {
     "@scalar/nextjs-api-reference": "^0.11.13",
