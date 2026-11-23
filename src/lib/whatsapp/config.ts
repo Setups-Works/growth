@@ -24,6 +24,13 @@ export interface WhatsAppConfig {
    * is deliberately slower, because going too fast risks a restricted number.
    */
   delayBetweenMessagesMs: number;
+  /** Safe sending (engine/guard.ts): marketing per 24h once warmed up. */
+  dailyLimit: number;
+  /** Local hours when marketing waits; null when quiet hours are off. */
+  quietStart: number | null;
+  quietEnd: number | null;
+  /** Append "Reply STOP to unsubscribe" to marketing. */
+  optOutFooter: boolean;
   updatedAt?: string;
 }
 
@@ -50,6 +57,10 @@ interface ConnectionRow {
   phone: string | null;
   dial_code: string | null;
   send_delay_ms: number | null;
+  daily_limit: number | null;
+  quiet_start: number | null;
+  quiet_end: number | null;
+  opt_out_footer: boolean | null;
   updated_at: Date | null;
 }
 
@@ -64,7 +75,7 @@ export async function readWhatsAppConfig(userId: string): Promise<WhatsAppConfig
   let row: ConnectionRow | undefined;
   try {
     [row] = await db()<ConnectionRow[]>`
-      select phone, dial_code, send_delay_ms, updated_at
+      select phone, dial_code, send_delay_ms, daily_limit, quiet_start, quiet_end, opt_out_footer, updated_at
       from whatsapp_connections where user_id = ${userId}
     `;
   } catch {
@@ -76,28 +87,51 @@ export async function readWhatsAppConfig(userId: string): Promise<WhatsAppConfig
     phone: row?.phone ?? undefined,
     defaultDialCode: (row?.dial_code ?? "").replace(/\D/g, "") || envDialCode(),
     delayBetweenMessagesMs: Math.max(MIN_SEND_DELAY_MS, row?.send_delay_ms || envDelay()),
+    dailyLimit: row?.daily_limit ?? 300,
+    quietStart: row ? row.quiet_start : 21,
+    quietEnd: row ? row.quiet_end : 9,
+    optOutFooter: row?.opt_out_footer ?? true,
     updatedAt: row?.updated_at?.toISOString(),
   };
 }
 
-/** Saves an account's sending preferences. */
-export async function writeWhatsAppPreferences(
-  userId: string,
-  prefs: { defaultDialCode?: string; delayBetweenMessagesMs?: number; phone?: string | null },
-): Promise<void> {
+export interface WhatsAppPreferences {
+  defaultDialCode?: string;
+  delayBetweenMessagesMs?: number;
+  phone?: string | null;
+  /** Marketing messages per rolling 24h once warmed up. */
+  dailyLimit?: number;
+  /** Local hours when marketing waits; `null` start and end turns this off. */
+  quietHours?: { start: number | null; end: number | null };
+  /** Append "Reply STOP to unsubscribe" to marketing messages. */
+  optOutFooter?: boolean;
+}
+
+/** Saves an account's sending preferences. Fields left undefined are unchanged. */
+export async function writeWhatsAppPreferences(userId: string, prefs: WhatsAppPreferences): Promise<void> {
+  const quietSet = prefs.quietHours !== undefined;
   await db()`
     insert into whatsapp_connections (user_id, session_id, dial_code, send_delay_ms, phone)
     values (
       ${userId}, ${userId},
       ${prefs.defaultDialCode ?? null},
-      ${prefs.delayBetweenMessagesMs ?? null},
+      coalesce(${prefs.delayBetweenMessagesMs ?? null}::int, 4000),
       ${prefs.phone ?? null}
     )
     on conflict (user_id) do update set
       session_id    = excluded.session_id,
-      dial_code     = coalesce(excluded.dial_code, whatsapp_connections.dial_code),
-      send_delay_ms = coalesce(excluded.send_delay_ms, whatsapp_connections.send_delay_ms),
-      phone         = coalesce(excluded.phone, whatsapp_connections.phone)
+      dial_code     = coalesce(${prefs.defaultDialCode ?? null}, whatsapp_connections.dial_code),
+      send_delay_ms = coalesce(${prefs.delayBetweenMessagesMs ?? null}::int, whatsapp_connections.send_delay_ms),
+      phone         = coalesce(${prefs.phone ?? null}, whatsapp_connections.phone)
+  `;
+  await db()`
+    update whatsapp_connections set
+      daily_limit    = coalesce(${prefs.dailyLimit ?? null}::int, daily_limit),
+      opt_out_footer = coalesce(${prefs.optOutFooter ?? null}::boolean, opt_out_footer),
+      quiet_start    = case when ${quietSet} then ${prefs.quietHours?.start ?? null}::smallint else quiet_start end,
+      quiet_end      = case when ${quietSet} then ${prefs.quietHours?.end ?? null}::smallint else quiet_end end,
+      updated_at     = now()
+    where user_id = ${userId}
   `;
 }
 
@@ -112,6 +146,10 @@ export function redactWhatsAppConfig(config: WhatsAppConfig | null) {
     phone: config.phone ?? null,
     defaultDialCode: config.defaultDialCode,
     delayBetweenMessagesMs: config.delayBetweenMessagesMs,
+    dailyLimit: config.dailyLimit,
+    quietStart: config.quietStart,
+    quietEnd: config.quietEnd,
+    optOutFooter: config.optOutFooter,
     updatedAt: config.updatedAt ?? null,
   };
 }

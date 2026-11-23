@@ -47,19 +47,28 @@ export async function GET(request: Request) {
   }
 
   const ready = session ? isSessionSendable(session) : false;
+  const capacity = await new WhatsAppClient(config).capacity().catch(() => null);
   return NextResponse.json({
     available: true,
     connected: ready,
     config: redactWhatsAppConfig(config),
     session,
     ready,
+    capacity,
     error,
   });
 }
 
+const hour = z.number().int().min(0).max(23).nullable();
+
 const schema = z.object({
   defaultDialCode: z.string().max(4).optional(),
   delayBetweenMessagesMs: z.coerce.number().int().min(MIN_SEND_DELAY_MS).max(60_000).optional(),
+  /** Safe-sending limit for marketing per 24 hours, once warmed up. */
+  dailyLimit: z.coerce.number().int().min(10).max(2000).optional(),
+  /** Both null turns quiet hours off. */
+  quietHours: z.object({ start: hour, end: hour }).optional(),
+  optOutFooter: z.boolean().optional(),
 });
 
 /** Saves the default country code and sending pace. */
@@ -84,9 +93,14 @@ export async function PUT(request: Request) {
     defaultDialCode:
       parsed.data.defaultDialCode !== undefined ? parsed.data.defaultDialCode.replace(/\D/g, "") : undefined,
     delayBetweenMessagesMs: parsed.data.delayBetweenMessagesMs,
+    dailyLimit: parsed.data.dailyLimit,
+    quietHours: parsed.data.quietHours,
+    optOutFooter: parsed.data.optOutFooter,
   });
 
-  return NextResponse.json({ saved: true, config: redactWhatsAppConfig(await readWhatsAppConfig(userId)) });
+  const config = await readWhatsAppConfig(userId);
+  if (config) await new WhatsAppClient(config).reloadSettings().catch(() => {});
+  return NextResponse.json({ saved: true, config: redactWhatsAppConfig(config) });
 }
 
 /**

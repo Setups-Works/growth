@@ -3,7 +3,7 @@ import type { CustomerRecord } from "@/lib/analytics/types";
 import { checkSendAllowance, recordSend } from "@/lib/billing/usage";
 import { isNotConnected } from "@/lib/store/errors";
 import { mediaFor, renderMessage, type BroadcastRecipient } from "@/lib/whatsapp/broadcast";
-import { isSessionSendable, WhatsAppClient } from "@/lib/whatsapp/client";
+import { isSessionSendable, WhatsAppApiError, WhatsAppClient } from "@/lib/whatsapp/client";
 import { isGatewayNotConnected } from "@/lib/whatsapp/errors";
 import {
   advance,
@@ -215,7 +215,11 @@ async function tickFlow(userId: string, flow: Flow, now: Date) {
          * same message again. The error is recorded on the enrolment so a
          * customer stuck behind a permanent failure is visible rather than
          * silently retried forever.
+         *
+         * At the safe-sending limit or in quiet hours (429), stop for this
+         * run instead: the remaining steps stay due and go out next time.
          */
+        if (error instanceof WhatsAppApiError && error.status === 429) break;
         failed += 1;
         const message = describe(error);
         state.active = state.active.map((e) =>
@@ -318,17 +322,18 @@ async function send(
   const body = renderMessage(message, recipient);
   const media = mediaFor(message, recipient);
 
+  // Flows are marketing: paced, capped and held in quiet hours by the guard.
   if (message.type === "text" || !media) {
-    await client.sendText(recipient.chatId, body);
+    await client.sendText(recipient.chatId, body, "marketing");
     return;
   }
 
   if (message.type === "video") {
-    await client.sendVideo(recipient.chatId, media, body);
+    await client.sendVideo(recipient.chatId, media, body, "marketing");
     return;
   }
 
-  await client.sendImage(recipient.chatId, media, body);
+  await client.sendImage(recipient.chatId, media, body, "marketing");
 }
 
 function describe(error: unknown): string {

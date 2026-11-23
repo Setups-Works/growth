@@ -432,10 +432,13 @@ export function nextChunk(job: BroadcastJob): BroadcastRecipient[] {
   return job.recipients.slice(job.cursor, job.cursor + MAX_BATCH_SIZE);
 }
 
-/** How long OpenWA will take to work through a submitted batch. */
+/**
+ * How long the engine will take to work through a submitted batch: the
+ * account's pace plus the guard's random extra gap (~1.5s) and typing time
+ * (~2.5s) per message, and a 1–3 minute break every 15–25 messages.
+ */
 export function estimateBatchMs(size: number, delayMs: number): number {
-  // Plus the randomised 0-2s jitter OpenWA adds to each gap.
-  return size * (delayMs + 1000);
+  return size * (Math.max(delayMs, 3000) + 4000) + Math.floor(size / 20) * 120_000;
 }
 
 export function progressOf(job: BroadcastJob) {

@@ -1,7 +1,9 @@
 import type { WhatsAppConfig } from "./config";
 import { WhatsAppApiError } from "./engine/errors";
+import type { Capacity, SendKind } from "./engine/guard";
 
 export { WhatsAppApiError };
+export type { Capacity, SendKind };
 
 /**
  * One account's WhatsApp, served by the engine running inside this Next.js
@@ -207,16 +209,35 @@ export class WhatsAppClient {
     return this.call("contacts/check", async () => (await this.session()).checkNumber(number));
   }
 
-  sendText(chatId: string, text: string): Promise<SentMessage> {
-    return this.call("send-text", async () => (await this.session()).sendText(chatId, text));
+  /*
+   * `kind` decides how the safe-sending guard treats the message (see
+   * engine/guard.ts): "marketing" (campaigns, flows) is paced, capped and
+   * held in quiet hours; "transactional" (order confirmations, checkout
+   * reminders, test sends) is paced but never capped; "reply" (inbox, menu
+   * bot) goes first. A marketing send that can't go out now is refused with
+   * status 429, so a scheduled job can retry on its next run.
+   */
+
+  sendText(chatId: string, text: string, kind: SendKind = "transactional"): Promise<SentMessage> {
+    return this.call("send-text", async () => (await this.session()).sendText(chatId, text, kind));
   }
 
-  sendImage(chatId: string, url: string, caption?: string): Promise<SentMessage> {
-    return this.call("send-image", async () => (await this.session()).sendImage(chatId, url, caption));
+  sendImage(chatId: string, url: string, caption?: string, kind: SendKind = "transactional"): Promise<SentMessage> {
+    return this.call("send-image", async () => (await this.session()).sendImage(chatId, url, caption, kind));
   }
 
-  sendVideo(chatId: string, url: string, caption?: string): Promise<SentMessage> {
-    return this.call("send-video", async () => (await this.session()).sendVideo(chatId, url, caption));
+  sendVideo(chatId: string, url: string, caption?: string, kind: SendKind = "transactional"): Promise<SentMessage> {
+    return this.call("send-video", async () => (await this.session()).sendVideo(chatId, url, caption, kind));
+  }
+
+  /** Marketing limits for this number, and how many may go out right now. */
+  async capacity(): Promise<Capacity> {
+    return (await this.session()).capacity();
+  }
+
+  /** Applies changed safe-sending settings to the next message. */
+  async reloadSettings(): Promise<void> {
+    (await this.session()).guard.invalidate();
   }
 
   /**

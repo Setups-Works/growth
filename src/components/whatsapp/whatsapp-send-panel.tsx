@@ -67,6 +67,8 @@ interface Progress {
   estimatedMsRemaining: number;
   waiting?: boolean;
   retryAfterMs?: number;
+  /** Why the broadcast is waiting, when safe-sending limits are holding it. */
+  notice?: string;
 }
 
 /**
@@ -972,9 +974,11 @@ export function WhatsAppSendPanel({
 
             {progress.error ? (
               <p className="text-[11px] text-destructive">{progress.error}</p>
+            ) : progress.notice ? (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">{progress.notice}</p>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                Sends are paced automatically. Leaving this page pauses the broadcast — anything
+                Sent slowly, like a person would, to protect your number. Leaving this page pauses the broadcast — anything
                 already handed over still goes out, and reopening resumes where it stopped.
               </p>
             )}

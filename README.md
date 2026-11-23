@@ -1075,6 +1075,27 @@ need a new scan. Set `WHATSAPP_DISABLED=true` to turn WhatsApp off.
 Run **one** app instance: the WhatsApp connections live in that process, and
 two instances would fight over the same number.
 
+### Safe sending (protecting your number from bans)
+
+Every message from every feature goes through one queue per number
+([`src/lib/whatsapp/engine/guard.ts`](src/lib/whatsapp/engine/guard.ts)):
+
+| Protection | What it does |
+|---|---|
+| One queue, with priority | Nothing bursts. Inbox and menu replies go first, then order confirmations and checkout reminders, then campaigns and flows. |
+| Human-like pacing | Random gaps between messages, a "typing…" indicator before each, and a 1–3 minute break every 15–25 marketing messages. |
+| Marketing limits + warm-up | Campaigns and flows stop at a per-day and per-hour limit (Settings → WhatsApp). A newly linked number starts at 30/day and rises to your limit over ~30 days. Transactional messages and replies are never capped. |
+| Quiet hours | No campaigns or flows at night (default 21:00–09:00, `WHATSAPP_TIMEZONE`). |
+| Only real WhatsApp numbers | Each number is checked first; numbers not on WhatsApp are skipped. |
+| Message variation | Write `{Hi|Hello|Hey}` and each customer gets one at random, so a campaign isn't 500 identical texts. |
+| STOP / START | "Reply STOP to unsubscribe" is added to marketing; a STOP reply unsubscribes automatically, START re-subscribes. |
+| Automatic brake | 5 marketing failures in a row pause marketing for 30 minutes. |
+
+A campaign that reaches the limit or quiet hours waits and continues by
+itself, and the campaign page says why. **This lowers the risk; it cannot
+remove it** — WhatsApp decides, and being reported as spam matters most, so
+only message customers who expect to hear from you.
+
 ### Linking a number
 
 1. Open **Settings → WhatsApp** and click **Link a number**.

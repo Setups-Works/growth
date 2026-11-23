@@ -17,15 +17,18 @@ export interface StoredMessage {
   body: string;
   timestamp: number;
   status: string | null;
+  /** For outgoing messages: 'marketing' | 'transactional' | 'reply'. */
+  kind?: string | null;
 }
 
 export async function saveMessage(sessionId: string, m: StoredMessage): Promise<void> {
   await db()`
-    insert into wa_messages (session_id, wa_message_id, chat_id, from_me, sender, push_name, type, body, "timestamp", status)
+    insert into wa_messages (session_id, wa_message_id, chat_id, from_me, sender, push_name, type, body, "timestamp", status, kind)
     values (${sessionId}, ${m.id}, ${m.chatId}, ${m.fromMe}, ${m.sender}, ${m.pushName},
-            ${m.type}, ${m.body}, ${m.timestamp}, ${m.status})
+            ${m.type}, ${m.body}, ${m.timestamp}, ${m.status}, ${m.kind ?? null})
     on conflict (session_id, wa_message_id) do update set
       status = coalesce(excluded.status, wa_messages.status),
+      kind = coalesce(excluded.kind, wa_messages.kind),
       body = case when excluded.body <> '' then excluded.body else wa_messages.body end
   `;
 }
@@ -140,4 +143,65 @@ export async function writePluginEnabled(sessionId: string, pluginId: string, en
 export async function deleteSessionData(sessionId: string): Promise<void> {
   await db()`delete from wa_messages where session_id = ${sessionId}`;
   await db()`delete from wa_plugins where session_id = ${sessionId}`;
+}
+
+// ── Safe sending ────────────────────────────────────────────────────────────
+
+/** Outgoing messages of one kind sent in the last `withinMs`. */
+export async function countSent(sessionId: string, kind: string, withinMs: number): Promise<number> {
+  const [row] = await db()<{ n: number }[]>`
+    select count(*)::int as n from wa_messages
+    where session_id = ${sessionId} and from_me and kind = ${kind}
+      and created_at > now() - make_interval(secs => ${withinMs / 1000})
+  `;
+  return row?.n ?? 0;
+}
+
+export interface SendSettings {
+  dailyLimit: number;
+  quietStart: number | null;
+  quietEnd: number | null;
+  optOutFooter: boolean;
+  delayMs: number;
+  linkedAt: Date | null;
+}
+
+export async function readSendSettings(sessionId: string): Promise<SendSettings> {
+  const [row] = await db()<
+    {
+      daily_limit: number;
+      quiet_start: number | null;
+      quiet_end: number | null;
+      opt_out_footer: boolean;
+      send_delay_ms: number;
+      linked_at: Date | null;
+    }[]
+  >`
+    select daily_limit, quiet_start, quiet_end, opt_out_footer, send_delay_ms, linked_at
+    from whatsapp_connections where user_id::text = ${sessionId}
+  `;
+  return {
+    dailyLimit: row?.daily_limit ?? 300,
+    quietStart: row ? row.quiet_start : 21,
+    quietEnd: row ? row.quiet_end : 9,
+    optOutFooter: row?.opt_out_footer ?? true,
+    delayMs: row?.send_delay_ms ?? 4000,
+    linkedAt: row?.linked_at ?? null,
+  };
+}
+
+/** Remembers when this number was first linked (the warm-up clock). */
+export async function markLinked(sessionId: string, phone: string | null): Promise<void> {
+  await db()`
+    insert into whatsapp_connections (user_id, session_id, phone, linked_at)
+    values (${sessionId}::uuid, ${sessionId}, ${phone}, now())
+    on conflict (user_id) do update set
+      linked_at = coalesce(whatsapp_connections.linked_at, now()),
+      phone = coalesce(excluded.phone, whatsapp_connections.phone)
+  `;
+}
+
+/** A device unlinked from the phone starts its warm-up again when relinked. */
+export async function clearLinked(sessionId: string): Promise<void> {
+  await db()`update whatsapp_connections set linked_at = null where user_id::text = ${sessionId}`;
 }

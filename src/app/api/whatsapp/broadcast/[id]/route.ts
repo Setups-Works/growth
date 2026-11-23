@@ -97,7 +97,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const fullChunk = nextChunk(job);
+  /*
+   * Safe sending: hand over only what this number may send right now. When
+   * the limit is reached or it is quiet hours, the job waits (still
+   * "sending") and the page shows why; it carries on by itself later.
+   */
+  const capacity = await client.capacity().catch(() => null);
+  if (capacity && capacity.remaining <= 0) {
+    const resumeMs = capacity.resumeAt ? Date.parse(capacity.resumeAt) - Date.now() : 60_000;
+    return NextResponse.json({
+      ...progressOf(job),
+      waiting: true,
+      retryAfterMs: Math.max(30_000, Math.min(resumeMs, 15 * 60_000)),
+      notice: capacity.inQuietHours
+        ? "Paused for quiet hours — sending resumes in the morning."
+        : capacity.pausedUntil
+          ? "Paused for 30 minutes after several failed sends, to protect your number."
+          : `Paused at this number's safe limit (${capacity.sentToday}/${capacity.dailyLimit} today, ${capacity.sentThisHour}/${capacity.hourlyLimit} this hour). It continues automatically.`,
+    });
+  }
+
+  const fullChunk = nextChunk(job).slice(0, capacity ? capacity.remaining : undefined);
 
   /*
    * Checked once for the whole batch, not per recipient — the size is known

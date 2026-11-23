@@ -181,6 +181,14 @@ reconnects linked accounts at server start. The menu bot (`chat-flow`) is
 credentials live under `.data/whatsapp` (the `app-data` volume), never in
 Postgres. `WHATSAPP_DISABLED=true` turns it all off (the test suite does).
 
+**Every send goes through the safe-sending guard** (`engine/guard.ts`): pass
+the right `kind` to `WhatsAppClient.sendText/Image/Video` — `"marketing"` for
+campaigns and flows (paced, capped, warm-up, quiet hours), `"transactional"`
+(default) for order confirmations, checkout reminders and test sends, `"reply"`
+for the inbox and menu bot. Marketing that can't go out now throws a 429
+`WhatsAppApiError`; scheduled jobs must treat that as "try next run", not as a
+failure. Never add a send path that bypasses `Session.deliver`.
+
 Billing gates (Lite plan, message caps) apply only when Razorpay is configured
 (`billingEnforced()` in `src/lib/billing/usage.ts`); a self-hosted server
 without Razorpay gives every account every feature.

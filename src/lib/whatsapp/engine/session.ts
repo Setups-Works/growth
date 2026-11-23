@@ -21,7 +21,9 @@ import pino from "pino";
 import QRCode from "qrcode";
 import type { BulkMessageItem, BulkOptions, WhatsAppSession } from "../client";
 import type { MenuConfig } from "../menu";
+import { addOptOut, isOptedOut, removeOptOut } from "../opt-out";
 import { WhatsAppApiError } from "./errors";
+import { OPT_OUT_FOOTER, optOutIntent, SendGuard, spin, type SendKind } from "./guard";
 import { MenuBot } from "./menu-bot";
 import * as store from "./store";
 
@@ -93,8 +95,13 @@ export class Session {
   private menuConfig: MenuConfig | null = null;
   private batches = new Map<string, Batch>();
   private sendChain: Promise<void> = Promise.resolve();
+  /** Every outgoing message goes through this — see guard.ts. */
+  readonly guard: SendGuard;
+  /** jid → whether it is on WhatsApp, so a number is looked up once a week at most. */
+  private onWhatsApp = new Map<string, { exists: boolean; at: number }>();
 
   constructor(readonly id: string) {
+    this.guard = new SendGuard(id);
     this.dir = join(/*turbopackIgnore: true*/ dataDir(), id);
   }
 
@@ -181,6 +188,8 @@ export class Session {
       this.lastError = null;
       if (sock.user?.id) this.phone = sock.user.id.split(":")[0].split("@")[0];
       if (sock.user?.name) this.pushName = sock.user.name;
+      await store.markLinked(this.id, this.phone).catch(() => {});
+      this.guard.invalidate();
       console.log(`[whatsapp ${this.id}] connected`);
     }
 
@@ -199,6 +208,7 @@ export class Session {
         this.status = "disconnected";
         this.phone = null;
         this.lastError = "This device was unlinked from WhatsApp. Scan a new QR code to link again.";
+        await store.clearLinked(this.id).catch(() => {});
         await rm(this.dir, { recursive: true, force: true }).catch(() => {});
         return;
       }
@@ -328,7 +338,13 @@ export class Session {
       await store.saveMessage(this.id, m).catch((e) => console.error("[whatsapp store]", e.message));
 
       if (type === "notify" && !m.fromMe && m.type === "text") {
-        await this.runMenuBot(m).catch((e) => console.error(`[whatsapp menu ${this.id}]`, e.message));
+        const handled = await this.handleOptOut(m).catch((e) => {
+          console.error(`[whatsapp opt-out ${this.id}]`, e.message);
+          return false;
+        });
+        if (!handled) {
+          await this.runMenuBot(m).catch((e) => console.error(`[whatsapp menu ${this.id}]`, e.message));
+        }
       }
     }
   }
@@ -361,7 +377,27 @@ export class Session {
     const text = this.menu.reply(this.menuConfig, m.chatId, m.body, m.isGroup);
     if (!text) return;
     // Replies to the JID the message came from, which may be a LID.
-    await this.deliver(m.replyJid, { text });
+    await this.deliver(m.replyJid, { text }, "reply");
+  }
+
+  /**
+   * "STOP" adds the customer to the opt-out list; "START" removes them. Being
+   * able to unsubscribe in one word is what keeps people from reporting the
+   * number as spam instead — the single biggest cause of bans.
+   */
+  private async handleOptOut(m: Normalised): Promise<boolean> {
+    if (m.isGroup || !m.chatId.endsWith("@c.us")) return false;
+    const intent = optOutIntent(m.body);
+    if (!intent) return false;
+    const digits = m.chatId.split("@")[0];
+    if (intent === "stop") {
+      await addOptOut(this.id, digits, "Replied STOP on WhatsApp");
+      await this.deliver(m.replyJid, { text: "You're unsubscribed and won't get any more messages from us. Reply START to subscribe again." }, "reply");
+    } else {
+      await removeOptOut(this.id, digits);
+      await this.deliver(m.replyJid, { text: "Welcome back! You're subscribed again. Reply STOP any time to unsubscribe." }, "reply");
+    }
+    return true;
   }
 
   // ── Outbound ────────────────────────────────────────────────────────────
@@ -373,13 +409,39 @@ export class Session {
     return this.sock;
   }
 
-  private async deliver(jid: string, content: Parameters<WASocket["sendMessage"]>[1]) {
+  /** Queues a message behind the guard, then sends it. */
+  private deliver(
+    jid: string,
+    content: Parameters<WASocket["sendMessage"]>[1],
+    kind: SendKind,
+    waitIfBlocked = false,
+  ) {
+    this.requireReady("send");
+    return this.guard.run(kind, () => this.sendNow(jid, content, kind), waitIfBlocked);
+  }
+
+  private async sendNow(jid: string, content: Parameters<WASocket["sendMessage"]>[1], kind: SendKind) {
     const sock = this.requireReady("send");
+
+    if (kind !== "reply" && jid.endsWith("@s.whatsapp.net")) {
+      const digits = jid.split("@")[0];
+      // Opted out means no outreach of any kind — enforced here as well as by
+      // each feature, so nothing can route around it.
+      if (await isOptedOut(this.id, digits)) {
+        throw new WhatsAppApiError("This customer replied STOP and has opted out.", 403, "send");
+      }
+      // Messaging numbers that aren't on WhatsApp is a strong spam signal.
+      if (!(await this.isOnWhatsApp(sock, jid))) {
+        throw new WhatsAppApiError("This number is not on WhatsApp.", 404, "send");
+      }
+    }
+
+    await this.simulateTyping(sock, jid, content, kind);
     const sent = await sock.sendMessage(jid, content);
     this.lastActive = new Date().toISOString();
     if (sent) {
       const m = await this.normalise(sock, sent);
-      if (m) await store.saveMessage(this.id, m).catch(() => {});
+      if (m) await store.saveMessage(this.id, { ...m, kind }).catch(() => {});
     }
     return {
       messageId: sent?.key?.id ?? "",
@@ -387,16 +449,57 @@ export class Session {
     };
   }
 
-  sendText(chatId: string, text: string) {
-    return this.deliver(this.toJid(chatId), { text });
+  private async isOnWhatsApp(sock: WASocket, jid: string): Promise<boolean> {
+    const cached = this.onWhatsApp.get(jid);
+    if (cached && Date.now() - cached.at < 7 * 24 * 60 * 60 * 1000) return cached.exists;
+    const [result] = (await sock.onWhatsApp(jid.split("@")[0])) ?? [];
+    const exists = Boolean(result?.exists);
+    this.onWhatsApp.set(jid, { exists, at: Date.now() });
+    if (this.onWhatsApp.size > 20_000) this.onWhatsApp.clear();
+    return exists;
   }
 
-  sendImage(chatId: string, url: string, caption?: string) {
-    return this.deliver(this.toJid(chatId), { image: { url }, caption: caption || undefined });
+  /** Shows "typing…" for about as long as a person would take to type it. */
+  private async simulateTyping(sock: WASocket, jid: string, content: unknown, kind: SendKind): Promise<void> {
+    const c = content as { text?: string; caption?: string };
+    const length = (c.text ?? c.caption ?? "").length;
+    const ms = kind === "reply" ? randBetween(600, 1500) : Math.min(6000, Math.max(1200, 800 + length * 35));
+    try {
+      await sock.sendPresenceUpdate("composing", jid);
+      await sleep(ms);
+      await sock.sendPresenceUpdate("paused", jid);
+    } catch {
+      /* presence is cosmetic; never block a send on it */
+    }
   }
 
-  sendVideo(chatId: string, url: string, caption?: string) {
-    return this.deliver(this.toJid(chatId), { video: { url }, caption: caption || undefined });
+  /** Marketing text: `{a|b}` variations resolved, and the STOP footer added. */
+  private async marketingText(text: string | undefined): Promise<string | undefined> {
+    if (text === undefined) return undefined;
+    let out = spin(text);
+    const settings = await this.guard.readSettings();
+    if (settings.optOutFooter && !/\bSTOP\b/.test(out)) out = `${out}\n\n${OPT_OUT_FOOTER}`;
+    return out;
+  }
+
+  async sendText(chatId: string, text: string, kind: SendKind = "transactional", waitIfBlocked = false) {
+    const body = kind === "marketing" ? ((await this.marketingText(text)) ?? "") : text;
+    return this.deliver(this.toJid(chatId), { text: body }, kind, waitIfBlocked);
+  }
+
+  async sendImage(chatId: string, url: string, caption?: string, kind: SendKind = "transactional", waitIfBlocked = false) {
+    const text = kind === "marketing" ? await this.marketingText(caption) : caption;
+    return this.deliver(this.toJid(chatId), { image: { url }, caption: text || undefined }, kind, waitIfBlocked);
+  }
+
+  async sendVideo(chatId: string, url: string, caption?: string, kind: SendKind = "transactional", waitIfBlocked = false) {
+    const text = kind === "marketing" ? await this.marketingText(caption) : caption;
+    return this.deliver(this.toJid(chatId), { video: { url }, caption: text || undefined }, kind, waitIfBlocked);
+  }
+
+  /** Safe-sending limits and what is left right now. */
+  capacity() {
+    return this.guard.capacity();
   }
 
   async checkNumber(number: string) {
@@ -411,9 +514,9 @@ export class Session {
   }
 
   /**
-   * Accepts a batch and works through it in the background, one message at a
-   * time with the requested pacing. Batches on the same account queue behind
-   * each other, so two broadcasts never interleave sends.
+   * Accepts a batch and works through it in the background. Every message is
+   * marketing and goes through the guard, which does the pacing, breaks,
+   * limits and quiet hours; batches run one after another.
    */
   sendBulk(messages: BulkMessageItem[], options: BulkOptions = {}, batchId?: string) {
     this.requireReady("send-bulk");
@@ -438,9 +541,6 @@ export class Session {
       if (oldest) this.batches.delete(oldest);
     }
 
-    const delay = Math.max(1000, Number(options.delayBetweenMessages) || 4000);
-    const jitter = options.randomizeDelay !== false;
-
     this.sendChain = this.sendChain.then(async () => {
       batch.status = "processing";
       for (let i = 0; i < messages.length; i++) {
@@ -454,9 +554,6 @@ export class Session {
           batch.failed++;
           batch.results.push({ chatId: item.chatId, success: false, error: (error as Error).message });
           if (options.stopOnError) break;
-        }
-        if (i < messages.length - 1 && !batch.cancelled) {
-          await sleep(delay + (jitter ? Math.random() * 2000 : 0));
         }
       }
       batch.status = batch.cancelled ? "cancelled" : "completed";
@@ -475,9 +572,13 @@ export class Session {
       video?: { url?: string };
     };
     const caption = content.caption ?? content.text;
-    if (item.type === "image") return this.sendImage(item.chatId, content.image?.url ?? content.url ?? "", caption);
-    if (item.type === "video") return this.sendVideo(item.chatId, content.video?.url ?? content.url ?? "", caption);
-    return this.sendText(item.chatId, content.text ?? "");
+    if (item.type === "image") {
+      return this.sendImage(item.chatId, content.image?.url ?? content.url ?? "", caption, "marketing", true);
+    }
+    if (item.type === "video") {
+      return this.sendVideo(item.chatId, content.video?.url ?? content.url ?? "", caption, "marketing", true);
+    }
+    return this.sendText(item.chatId, content.text ?? "", "marketing", true);
   }
 
   getBatch(id: string) {
@@ -494,6 +595,10 @@ export class Session {
     batch.cancelled = true;
     return this.getBatch(id);
   }
+}
+
+function randBetween(min: number, max: number): number {
+  return Math.floor(min + Math.random() * (max - min + 1));
 }
 
 function sleep(ms: number): Promise<void> {

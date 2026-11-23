@@ -137,10 +137,10 @@ export async function POST(
     const { type, text, mediaUrl } = parsed.data;
     const sent =
       type === "image"
-        ? await client.sendImage(chatId, mediaUrl!, text)
+        ? await client.sendImage(chatId, mediaUrl!, text, "reply")
         : type === "video"
-          ? await client.sendVideo(chatId, mediaUrl!, text)
-          : await client.sendText(chatId, text);
+          ? await client.sendVideo(chatId, mediaUrl!, text, "reply")
+          : await client.sendText(chatId, text, "reply");
 
     await recordSend(userId);
     return NextResponse.json({ sent: true, ...sent });

@@ -51,6 +51,10 @@ export const CHANGELOG: ChangelogRelease[] = [
         text: "The whole app now runs from one docker compose command, on any server you choose.",
       },
       {
+        kind: "new",
+        text: "Safe sending, to protect your WhatsApp number: messages go out at a human pace with a typing indicator, campaigns and flows warm up slowly on a new number and stop at a daily limit you set, nothing goes out at night, numbers not on WhatsApp are skipped, and customers who reply STOP are unsubscribed automatically. Order confirmations and replies are never held back.",
+      },
+      {
         kind: "fixed",
         text: "The Acquisition page shows where orders came from again, product and customer names no longer show codes like “&amp;”, and dashboards load faster — each order is now stored with only the fields reports use.",
       },
