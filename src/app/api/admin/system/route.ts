@@ -27,6 +27,24 @@ export async function GET(request: Request) {
     sql<{ version: string }[]>`select version()`,
   ]);
 
+  // reltuples is only Postgres's estimate, refreshed by autovacuum/analyze, so
+  // a table emptied by a store disconnect can still read "~25,000 rows" for a
+  // while. Count each listed table exactly; a count that would take more than
+  // a few seconds falls back to the estimate and says so.
+  const countedTables = await Promise.all(
+    tables.map(async (t) => {
+      try {
+        const [row] = await sql.begin(async (tx) => {
+          await tx`set local statement_timeout = '3s'`;
+          return tx<{ n: number }[]>`select count(*)::float8 as n from ${tx(t.name)}`;
+        });
+        return { ...t, rows: row.n, exact: true };
+      } catch {
+        return { ...t, rows: Math.max(t.rows, 0), exact: false };
+      }
+    }),
+  );
+
   const set = (name: string) => Boolean(process.env[name]);
   const integrations = [
     { name: "Database", ok: true, detail: pg.version.split(",")[0] },
@@ -49,7 +67,7 @@ export async function GET(request: Request) {
   const mem = process.memoryUsage();
   return NextResponse.json({
     integrations,
-    database: { bytes: size.bytes, tables },
+    database: { bytes: size.bytes, tables: countedTables },
     migrations,
     process: {
       node: process.version,
