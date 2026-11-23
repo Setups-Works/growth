@@ -1,6 +1,10 @@
-# Automatic HTTPS (Let's Encrypt) in front of the app. Enabled with
-# `docker compose --profile https up -d`. DOMAIN must already point (DNS A
-# record) at this machine, with ports 80 and 443 open.
+# HTTPS in front of the app. Enabled with `docker compose --profile https up -d`.
+#
+#   DOMAIN=your.domain  → a real Let's Encrypt certificate. The domain's DNS A
+#                         record must point at this machine, ports 80 and 443 open.
+#   DOMAIN=localhost    → local development: Caddy issues a certificate from its
+#                         own local CA. Trust that CA once on your machine
+#                         (see README → "HTTPS on localhost") to get a padlock.
 {$DOMAIN} {
 	encode zstd gzip
 	reverse_proxy app:3000

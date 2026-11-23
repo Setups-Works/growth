@@ -1042,6 +1042,27 @@ address**:
 Both are validated **before** you are redirected, so you can never get stuck
 approving an app that could not have received the result.
 
+### HTTPS on localhost
+
+```bash
+# in .env: DOMAIN=localhost and APP_URL=https://localhost
+docker compose --profile https up -d
+```
+
+Caddy serves **https://localhost** (and redirects plain HTTP) with a
+certificate from its own local authority. Trust that authority once so the
+browser shows a padlock instead of a warning (macOS):
+
+```bash
+docker compose --profile https cp caddy:/data/caddy/pki/authorities/local/root.crt .data/caddy-local-root.crt
+security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db .data/caddy-local-root.crt
+```
+
+Firefox keeps its own certificate list: import the same file under
+Settings → Privacy & Security → Certificates. This is for local use only —
+WooCommerce still cannot reach `localhost`, so connecting a real store needs
+a public address (a tunnel, or a server with a real `DOMAIN`).
+
 ### Local development
 
 ```bash
