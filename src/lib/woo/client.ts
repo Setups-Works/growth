@@ -262,16 +262,27 @@ export class WooClient {
   async fetchAll<T>(
     endpoint: string,
     params: Record<string, string | number | undefined> = {},
-    opts: { perPage?: number; maxPages?: number; concurrency?: number } = {},
+    opts: {
+      perPage?: number;
+      maxPages?: number;
+      concurrency?: number;
+      /**
+       * Receives each batch as it arrives instead of collecting everything.
+       * Lets a long pull save as it goes, so progress is visible and a cut-off
+       * request keeps what it already read. The return value is then empty.
+       */
+      onBatch?: (rows: T[]) => Promise<void>;
+    } = {},
   ): Promise<T[]> {
     const perPage = opts.perPage ?? 100;
     const concurrency = opts.concurrency ?? 4;
 
     const first = await this.request<T[]>(endpoint, { ...params, per_page: perPage, page: 1 });
     const pageCount = Math.min(first.totalPages, opts.maxPages ?? Infinity);
-    if (pageCount <= 1) return first.data;
+    if (opts.onBatch) await opts.onBatch(first.data);
+    if (pageCount <= 1) return opts.onBatch ? [] : first.data;
 
-    const out: T[] = [...first.data];
+    const out: T[] = opts.onBatch ? [] : [...first.data];
     const pages = Array.from({ length: pageCount - 1 }, (_, i) => i + 2);
 
     for (let i = 0; i < pages.length; i += concurrency) {
@@ -281,7 +292,8 @@ export class WooClient {
           this.request<T[]>(endpoint, { ...params, per_page: perPage, page }).then((r) => r.data),
         ),
       );
-      for (const r of results) out.push(...r);
+      if (opts.onBatch) await opts.onBatch(results.flat());
+      else for (const r of results) out.push(...r);
       // Brief pause between batches so a long pull reads as steady traffic
       // rather than a burst worth rate-limiting.
       if (i + concurrency < pages.length) await new Promise((resolve) => setTimeout(resolve, 120));
@@ -348,8 +360,12 @@ export class WooClient {
     });
   }
 
-  getCustomers(params: Record<string, string | number | undefined>, maxPages?: number) {
-    return this.fetchAll<WooCustomer>("customers", { ...params, _fields: CUSTOMER_FIELDS }, { maxPages });
+  getCustomers(
+    params: Record<string, string | number | undefined>,
+    maxPages?: number,
+    onBatch?: (rows: WooCustomer[]) => Promise<void>,
+  ) {
+    return this.fetchAll<WooCustomer>("customers", { ...params, _fields: CUSTOMER_FIELDS }, { maxPages, onBatch });
   }
 
   /**
@@ -380,8 +396,12 @@ export class WooClient {
     });
   }
 
-  getProducts(params: Record<string, string | number | undefined>, maxPages?: number) {
-    return this.fetchAll<WooProduct>("products", { ...params, _fields: PRODUCT_FIELDS }, { maxPages });
+  getProducts(
+    params: Record<string, string | number | undefined>,
+    maxPages?: number,
+    onBatch?: (rows: WooProduct[]) => Promise<void>,
+  ) {
+    return this.fetchAll<WooProduct>("products", { ...params, _fields: PRODUCT_FIELDS }, { maxPages, onBatch });
   }
 
   /**

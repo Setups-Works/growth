@@ -30,7 +30,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
  */
 
 /** Slow enough not to hammer the endpoint, fast enough to feel live. */
-const POLL_MS = 3000;
+const POLL_MS = 4000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface SyncState {
   lastSyncAt: string | null;
@@ -99,22 +103,30 @@ export default function OnboardingSyncPage() {
       const current = await poll();
       if (!current) return;
 
+      let failures = 0;
       while (!cancelled) {
         try {
           const res = await fetch("/api/sync", { method: "POST" });
-          const body = await res.json();
+          const body = (await res.json()) as { done?: boolean; warnings?: string[]; detail?: string; error?: string };
 
           if (!res.ok) {
             setError(body.detail ?? body.error ?? "The sync failed.");
             return;
           }
 
+          failures = 0;
           await poll();
           if (body.done) return;
+
+          // Another sync (the scheduler's) is already working on this store:
+          // wait for it rather than asking again immediately.
+          const busy = body.warnings?.some((w) => w.includes("already running"));
+          await sleep(busy ? 10_000 : 500);
         } catch {
-          // A dropped connection is not a failed sync — the server keeps its
-          // cursor. Stop driving and let the poll and the scheduler continue.
-          return;
+          // A dropped or timed-out request is not a failed sync — the server
+          // keeps its cursor. Back off and carry on; give up after a few.
+          if (++failures >= 5) return;
+          await sleep(5_000 * failures);
         }
       }
     })();

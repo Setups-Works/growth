@@ -84,6 +84,7 @@ interface StoreRow {
   synced_through: Date | null;
   backfill_through: Date | null;
   backfill_done: boolean;
+  customers_complete: boolean;
 }
 
 export async function syncStore(
@@ -97,12 +98,13 @@ export async function syncStore(
   const warnings: string[] = [];
 
   const [store] = await db()<StoreRow[]>`
-    select synced_through, backfill_through, backfill_done from stores where id = ${storeId}
+    select synced_through, backfill_through, backfill_done, customers_complete from stores where id = ${storeId}
   `;
 
   if (opts.full) {
     await db()`
-      update stores set backfill_through = null, backfill_done = false, synced_through = null
+      update stores set backfill_through = null, backfill_done = false, synced_through = null,
+                        customers_complete = false
       where id = ${storeId}
     `;
   }
@@ -160,42 +162,37 @@ export async function syncStore(
 
   try {
     /*
-     * Customers and products first, and only on a backfill's first pass or an
-     * incremental run. They are small — hundreds, not tens of thousands — so
-     * they finish in one go, and repeating them on every resumed page of the
-     * order backfill would waste most of the budget.
+     * Order of work, fastest-to-useful first:
+     *
+     *   1. Products — a small list, needed by campaigns and product reports.
+     *      Fully on the first pass of a backfill, then only recent changes.
+     *   2. Orders — what the dashboard is built from. Backfilled at full
+     *      speed, saved as each batch arrives.
+     *   3. Customers — after the order history is complete, once in full,
+     *      then only recent changes. Saved as each page arrives.
+     *
+     * Customers used to come first, before any order: on a store with
+     * thousands of them the dashboard stayed empty for minutes, and a pull
+     * longer than one request restarted from scratch every time.
      */
-    const catalogueNeeded = !backfilling || !store?.backfill_through;
-    if (catalogueNeeded) {
-      const since = opts.full || !store?.synced_through
-        ? undefined
-        : isoSeconds(new Date(store.synced_through.getTime() - OVERLAP_SECONDS * 1000));
+    const since = store?.synced_through
+      ? isoSeconds(new Date(store.synced_through.getTime() - OVERLAP_SECONDS * 1000))
+      : undefined;
 
-      const [c, p] = await Promise.all([
-        client
-          .getCustomers(
-            { orderby: "registered_date", order: "asc", role: "all", ...(since ? { modified_after: since } : {}) },
-            config.maxPages,
-          )
-          .catch((error) => {
-            warnings.push(`Customer records unavailable (${describe(error)}).`);
-            return [] as WooCustomer[];
-          }),
-        client
-          .getProducts(
-            { orderby: "date", order: "desc", status: "any", ...(since ? { modified_after: since } : {}) },
-            config.maxPages,
-          )
-          .catch((error) => {
-            warnings.push(`Product catalogue unavailable (${describe(error)}).`);
-            return [] as WooProduct[];
-          }),
-      ]);
-
-      await writeCustomers(storeId, c);
-      await writeProducts(storeId, p);
-      customers = c.length;
-      products = p.length;
+    const productsNeeded = !backfilling || !store?.backfill_through;
+    if (productsNeeded) {
+      await client
+        .getProducts(
+          { orderby: "date", order: "desc", status: "any", ...(since && !opts.full ? { modified_after: since } : {}) },
+          config.maxPages,
+          async (rows) => {
+            await writeProducts(storeId, rows);
+            products += rows.length;
+          },
+        )
+        .catch((error) => {
+          warnings.push(`Product catalogue unavailable (${describe(error)}).`);
+        });
     }
 
     if (backfilling) {
@@ -205,6 +202,31 @@ export async function syncStore(
     } else {
       orders = await incrementalOrders(storeId, client, config, store);
       done = true;
+    }
+
+    // Straight on to customers once the order history is complete.
+    if (!backfilling || done) {
+      const fullPass = !store?.customers_complete;
+      await client
+        .getCustomers(
+          {
+            orderby: "registered_date",
+            order: "asc",
+            role: "all",
+            ...(!fullPass && since ? { modified_after: since } : {}),
+          },
+          config.maxPages,
+          async (rows) => {
+            await writeCustomers(storeId, rows);
+            customers += rows.length;
+          },
+        )
+        .then(async () => {
+          if (fullPass) await db()`update stores set customers_complete = true where id = ${storeId}`;
+        })
+        .catch((error) => {
+          warnings.push(`Customer records unavailable (${describe(error)}).`);
+        });
     }
 
     await db()`

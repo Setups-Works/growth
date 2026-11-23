@@ -15,6 +15,23 @@ import { dataDir, Session } from "./session";
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
+/*
+ * libsignal (inside Baileys) prints whole encryption sessions — private keys
+ * included — with console.info("Closing session:", …) and friends. Those end
+ * up in the host's log files, so they are dropped here before anything else
+ * in the engine runs. Everything else logged through console.info is kept.
+ */
+const SIGNAL_SESSION_LOGS = ["Closing session", "Opening session", "Removing old closed session", "Migrating session to"];
+const consoleFlag = globalThis as typeof globalThis & { __growthSignalLogFilter?: boolean };
+if (!consoleFlag.__growthSignalLogFilter) {
+  consoleFlag.__growthSignalLogFilter = true;
+  const info = console.info.bind(console);
+  console.info = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && SIGNAL_SESSION_LOGS.some((p) => (args[0] as string).startsWith(p))) return;
+    info(...args);
+  };
+}
+
 type Registry = { sessions: Map<string, Session>; restored: boolean };
 const g = globalThis as typeof globalThis & { __growthWhatsApp?: Registry };
 const registry: Registry = (g.__growthWhatsApp ??= { sessions: new Map(), restored: false });

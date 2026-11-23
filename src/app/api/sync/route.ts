@@ -48,7 +48,12 @@ export async function POST(request: Request) {
         historyMonths: store.historyMonths,
         maxPages: store.maxPages,
       },
-      { full },
+      /*
+       * Under Azure App Service's 230-second request limit (and most proxies'),
+       * with room to finish the page in hand. The sync page calls again
+       * straight away, so a shorter request costs nothing.
+       */
+      { full, budgetMs: Number(process.env.SYNC_REQUEST_BUDGET_MS) || 150_000 },
     );
 
     // The memo is keyed on the store, not on the data, so a completed sync has

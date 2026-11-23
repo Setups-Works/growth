@@ -196,6 +196,16 @@ export async function proxy(request: NextRequest) {
 
   if (!pathname.startsWith("/api/")) {
     /*
+     * One public address. A deployment reachable under two hostnames (a
+     * custom domain and *.azurewebsites.net) splits sessions: the login
+     * cookie belongs to one host, and a redirect back from WooCommerce to the
+     * other lands signed out. Page visits on any other host are sent to
+     * APP_URL's; the API is left alone so health probes and callbacks work.
+     */
+    const canonical = canonicalRedirect(request);
+    if (canonical) return canonical;
+
+    /*
      * Signing in is not something you can do while signed in. Leaving the form
      * reachable means someone lands on it, cannot tell whether they are logged
      * in, and signs in again to find out.
@@ -319,6 +329,22 @@ function forward(request: NextRequest, userId: string, email: string, scopes?: S
   // may do anything — from a key that may not.
   if (scopes) headers.set(SCOPES_HEADER, scopes.join(","));
   return NextResponse.next({ request: { headers } });
+}
+
+function canonicalRedirect(request: NextRequest): NextResponse | null {
+  const appUrl = process.env.APP_URL;
+  if (process.env.NODE_ENV !== "production" || !appUrl?.startsWith("https://")) return null;
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  let target: URL;
+  try {
+    target = new URL(appUrl);
+  } catch {
+    return null;
+  }
+  const host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(",")[0].trim();
+  if (!host || host === target.host || host.startsWith("localhost") || host.startsWith("127.0.0.1")) return null;
+  const url = new URL(request.nextUrl.pathname + request.nextUrl.search, target);
+  return NextResponse.redirect(url, 308);
 }
 
 export const config = {

@@ -337,11 +337,26 @@ export async function syncStatus(storeId: string): Promise<{
   ]);
 
 
+  /*
+   * The stored counts are refreshed when a run finishes. While one is running
+   * (a first sync can take minutes), count what has been saved so far, so the
+   * progress shown is live rather than stuck at 0.
+   */
+  let live: { orders: number; customers: number; products: number } | null = null;
+  if (run?.status === "running") {
+    const [c] = await db()<{ orders: number; customers: number; products: number }[]>`
+      select (select count(*) from woo_orders where store_id = ${storeId})::int as orders,
+             (select count(*) from woo_customers where store_id = ${storeId})::int as customers,
+             (select count(*) from woo_products where store_id = ${storeId})::int as products
+    `;
+    live = c ?? null;
+  }
+
   return {
     lastSyncAt: store?.last_sync_at?.toISOString() ?? null,
-    orders: store?.order_count ?? 0,
-    customers: store?.customer_count ?? 0,
-    products: store?.product_count ?? 0,
+    orders: live?.orders ?? store?.order_count ?? 0,
+    customers: live?.customers ?? store?.customer_count ?? 0,
+    products: live?.products ?? store?.product_count ?? 0,
     backfillDone: store?.backfill_done ?? false,
     backfillThrough: store?.backfill_through?.toISOString() ?? null,
     lastRun: run
