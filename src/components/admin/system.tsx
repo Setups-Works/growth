@@ -6,7 +6,7 @@ import { ago, bytes, Kpi, LoadState, Panel, Pill, ReloadButton, ScrollTable, use
 
 interface SystemResponse {
   integrations: { name: string; ok: boolean; detail?: string }[];
-  database: { bytes: number; tables: { name: string; bytes: number; rows: number }[] };
+  database: { bytes: number; tables: { name: string; bytes: number; rows: number; exact: boolean }[] };
   migrations: Record<string, unknown>[];
   process: { node: string; uptimeSeconds: number; rssBytes: number; heapUsedBytes: number; startedAt: string };
   whatsapp: { id: string; email: string | null; status: string; phone: string | null; connectedAt: string | null; lastActive: string | null; lastError: string | null }[];
@@ -103,7 +103,11 @@ export function AdminSystem() {
                   <li key={t.name} className="flex items-center justify-between gap-3 px-4 py-2 text-sm sm:px-5">
                     <code className="truncate text-xs">{t.name}</code>
                     <span className="shrink-0 text-xs text-ink-3 tabular-nums">
-                      {t.rows > 0 ? `~${Math.round(t.rows).toLocaleString("en-IN")} rows · ` : ""}
+                      {t.exact
+                        ? `${t.rows.toLocaleString("en-IN")} ${t.rows === 1 ? "row" : "rows"} · `
+                        : t.rows > 0
+                          ? `~${Math.round(t.rows).toLocaleString("en-IN")} rows · `
+                          : ""}
                       {bytes(t.bytes)}
                     </span>
                   </li>
