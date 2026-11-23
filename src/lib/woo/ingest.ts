@@ -36,12 +36,36 @@ export function orderForStorage(order: WooOrder): WooOrder {
   return slimOrder(copy);
 }
 
+/**
+ * What's kept of a customer: only the fields anything reads (the analytics
+ * customer directory, the inbox and campaigns). WooCommerce's full record
+ * also carries the shipping address, username, role, avatar and meta data;
+ * none of it is used, and on a real store it was two thirds of the row.
+ */
 export function customerForStorage(customer: WooCustomer): WooCustomer {
-  const copy = { ...customer };
-  copy.first_name = decodeEntities(copy.first_name);
-  copy.last_name = decodeEntities(copy.last_name);
-  if (copy.billing?.company) copy.billing = { ...copy.billing, company: decodeEntities(copy.billing.company) };
-  return copy;
+  const b = customer.billing;
+  const billing = b
+    ? Object.fromEntries(
+        Object.entries({
+          first_name: b.first_name ? decodeEntities(b.first_name) : undefined,
+          last_name: b.last_name ? decodeEntities(b.last_name) : undefined,
+          company: b.company ? decodeEntities(b.company) : undefined,
+          email: b.email || undefined,
+          phone: b.phone || undefined,
+          city: b.city || undefined,
+          state: b.state || undefined,
+          country: b.country || undefined,
+        }).filter(([, v]) => v !== undefined),
+      )
+    : undefined;
+  return {
+    id: customer.id,
+    date_created: customer.date_created,
+    email: customer.email,
+    first_name: decodeEntities(customer.first_name),
+    last_name: decodeEntities(customer.last_name),
+    ...(billing ? { billing } : {}),
+  } as unknown as WooCustomer;
 }
 
 export function productForStorage(product: WooProduct): WooProduct {

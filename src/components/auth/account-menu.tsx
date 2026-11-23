@@ -1,6 +1,6 @@
 "use client";
 
-import { LogIn, LogOut, Settings2, User2 } from "lucide-react";
+import { LogIn, LogOut, Settings2, User2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -89,6 +89,12 @@ export function AccountMenu() {
           {state.user?.email}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/settings?section=profile" className="gap-2">
+            <UserRound className="size-3.5" />
+            Your profile
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/settings" className="gap-2">
             <Settings2 className="size-3.5" />

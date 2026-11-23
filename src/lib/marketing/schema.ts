@@ -58,7 +58,7 @@ const website = {
  */
 function offers() {
   return PLANS.map((plan) => {
-    const amount = Number(plan.price.replace(/[^\d.]/g, ""));
+    const amount = plan.pricePaise / 100;
     return {
       "@type": "Offer",
       name: plan.name,

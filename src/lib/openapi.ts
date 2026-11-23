@@ -80,6 +80,12 @@ export const openApiDocument = {
     { name: "Billing", description: "Plans, usage, invoices and Razorpay subscriptions" },
     { name: "Order confirmations", description: "WhatsApp thank-you messages sent on new orders" },
     {
+      name: "Admin",
+      description:
+        "The server's admin panel. Browser session only, and only for admins (users.is_admin or " +
+        "ADMIN_EMAILS) — an API key gets 403 here, even its owner's. Every change is audit-logged.",
+    },
+    {
       name: "WhatsApp Cloud API pilot",
       description:
         "PUL-16: a minimal pilot against Meta's official Cloud API test business number, built " +
@@ -215,10 +221,10 @@ export const openApiDocument = {
         description:
           "Session only — like managing API keys, a leaked API key must not be able " +
           "to change what the account is billed. Creates a Razorpay customer and a " +
-          "UPI Autopay subscription for the requested plan, cancelling any existing " +
+          "UPI Autopay or card subscription for the requested plan, cancelling any existing " +
           "subscription first (a no-op if the account is already active or mid-trial " +
           "on exactly this plan). An account that has never authenticated a trial " +
-          "mandate before gets one automatically: the UPI mandate is authorized now, " +
+          "mandate before gets one automatically: the mandate is authorized now, " +
           "same as any subscription, but Razorpay defers the first charge 14 days " +
           "(`start_at`) -- nothing further is required from the customer or this app " +
           "for the real charge to happen automatically once the trial ends. Returns a " +
@@ -1478,16 +1484,23 @@ export const openApiDocument = {
       post: {
         tags: ["Auth"],
         summary: "Create an account and sign in",
-        description: "Sets the HttpOnly session cookie. Closed when the server sets DISABLE_SIGNUPS=true.",
+        description:
+          "Sets the HttpOnly session cookie. Closed when the server sets DISABLE_SIGNUPS=true or an admin " +
+          "turns sign-ups off. A 400/409 names the offending input in `field`.",
         security: [],
         requestBody: { required: true, content: json({
             type: "object",
-            properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 } },
-            required: ["email", "password"],
+            properties: {
+              name: { type: "string", minLength: 2, maxLength: 80 },
+              email: { type: "string", format: "email" },
+              phone: { type: "string", description: "Mobile number; a bare 10-digit number is read as +91. Stored as E.164." },
+              password: { type: "string", minLength: 8 },
+            },
+            required: ["name", "email", "phone", "password"],
           }) },
         responses: {
           200: { description: "Signed up and signed in", content: json({ type: "object" }) },
-          400: errorResponse("Invalid email, or password too short"),
+          400: errorResponse("Invalid name, email or phone, or password too short"),
           403: errorResponse("Sign-ups are closed on this server"),
           409: errorResponse("An account with this email already exists"),
           429: errorResponse("Too many attempts"),
@@ -1576,6 +1589,153 @@ export const openApiDocument = {
           200: { description: "Password set and signed in", content: json({ type: "object" }) },
           400: errorResponse("Expired or already-used link, or password too short"),
         },
+      },
+    },
+
+    "/api/account": {
+      get: {
+        tags: ["Auth"],
+        summary: "Your profile: name, email, mobile number, plan and store count",
+        responses: { 200: { description: "Your account", content: json({ type: "object" }) } },
+      },
+      patch: {
+        tags: ["Auth"],
+        summary: "Update your name, mobile number or email",
+        description:
+          "Browser session only. Changing the email also needs `currentPassword`. Name, phone and email " +
+          "are copied to the Razorpay customer. A 400/409 names the offending input in `field`.",
+        security: [{ Session: [] }],
+        requestBody: {
+          required: true,
+          content: json({
+            type: "object",
+            properties: {
+              name: { type: "string", minLength: 2, maxLength: 80 },
+              phone: { type: "string" },
+              email: { type: "string", format: "email" },
+              currentPassword: { type: "string" },
+            },
+          }),
+        },
+        responses: {
+          200: { description: "Saved", content: json({ type: "object" }) },
+          400: errorResponse("Invalid field, or wrong current password"),
+          409: errorResponse("Email already used by another account"),
+        },
+      },
+    },
+    "/api/admin/overview": {
+      get: {
+        tags: ["Admin"],
+        summary: "Accounts, revenue, usage and stores at a glance",
+        security: [{ Session: [] }],
+        responses: { 200: { description: "Totals and recent sign-ups", content: json({ type: "object" }) }, 403: errorResponse("Not an admin") },
+      },
+    },
+    "/api/admin/users": {
+      get: {
+        tags: ["Admin"],
+        summary: "Every account, searchable",
+        security: [{ Session: [] }],
+        parameters: [
+          { name: "q", in: "query", schema: { type: "string" }, description: "Email or name contains" },
+          { name: "filter", in: "query", schema: { type: "string", enum: ["all", "paying", "trial", "free", "admins", "suspended"] } },
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1 } },
+        ],
+        responses: { 200: { description: "A page of accounts", content: json({ type: "object" }) }, 403: errorResponse("Not an admin") },
+      },
+    },
+    "/api/admin/users/{id}": {
+      get: {
+        tags: ["Admin"],
+        summary: "One account in full",
+        security: [{ Session: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: { 200: { description: "Plan, stores, usage, payments, history", content: json({ type: "object" }) }, 404: errorResponse("No such account") },
+      },
+      patch: {
+        tags: ["Admin"],
+        summary: "Change an account",
+        description:
+          "One action per call: grant_plan {plan, days}, clear_plan, set_unlimited {value}, reset_usage, " +
+          "reset_trial, cancel_subscription, set_admin {value}, suspend {value}.",
+        security: [{ Session: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        requestBody: { required: true, content: json({ type: "object", required: ["action"], properties: { action: { type: "string" } } }) },
+        responses: { 200: { description: "Changed", content: json({ type: "object" }) }, 422: errorResponse("Unknown action") },
+      },
+    },
+    "/api/admin/plans": {
+      get: {
+        tags: ["Admin"],
+        summary: "The plan catalog and the Razorpay plan each tier charges",
+        security: [{ Session: [] }],
+        responses: { 200: { description: "Catalog", content: json({ type: "object" }) } },
+      },
+      put: {
+        tags: ["Admin"],
+        summary: "Save one tier — name, price, features, message cap, trial, Razorpay plan",
+        security: [{ Session: [] }],
+        requestBody: { required: true, content: json({ type: "object" }) },
+        responses: { 200: { description: "Saved", content: json({ type: "object" }) }, 422: errorResponse("Invalid plan") },
+      },
+    },
+    "/api/admin/plans/{id}/razorpay": {
+      post: {
+        tags: ["Admin"],
+        summary: "Create a Razorpay plan at this tier's price and link it",
+        security: [{ Session: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", enum: ["lite", "go", "plus"] } }],
+        responses: { 200: { description: "Created and linked", content: json({ type: "object" }) }, 502: errorResponse("Razorpay refused") },
+      },
+    },
+    "/api/admin/billing": {
+      get: {
+        tags: ["Admin"],
+        summary: "Subscriptions, payments and the Razorpay webhook's health",
+        security: [{ Session: [] }],
+        responses: { 200: { description: "Billing state", content: json({ type: "object" }) } },
+      },
+    },
+    "/api/admin/stores": {
+      get: {
+        tags: ["Admin"],
+        summary: "Every connected store with its owner and sync state (no credentials)",
+        security: [{ Session: [] }],
+        responses: { 200: { description: "Stores", content: json({ type: "object" }) } },
+      },
+      post: {
+        tags: ["Admin"],
+        summary: "Start a sync or full re-import for one store",
+        security: [{ Session: [] }],
+        requestBody: {
+          required: true,
+          content: json({ type: "object", required: ["storeId", "action"], properties: { storeId: { type: "string", format: "uuid" }, action: { type: "string", enum: ["sync", "full_resync"] } } }),
+        },
+        responses: { 200: { description: "Started in the background", content: json({ type: "object" }) }, 409: errorResponse("Already syncing") },
+      },
+    },
+    "/api/admin/system": {
+      get: {
+        tags: ["Admin"],
+        summary: "Configuration, database, process health, linked numbers and the audit log",
+        security: [{ Session: [] }],
+        responses: { 200: { description: "System state (never secret values)", content: json({ type: "object" }) } },
+      },
+    },
+    "/api/admin/settings": {
+      get: {
+        tags: ["Admin"],
+        summary: "Site settings: announcement banner, sign-ups, support email",
+        security: [{ Session: [] }],
+        responses: { 200: { description: "Settings", content: json({ type: "object" }) } },
+      },
+      put: {
+        tags: ["Admin"],
+        summary: "Change site settings",
+        security: [{ Session: [] }],
+        requestBody: { required: true, content: json({ type: "object" }) },
+        responses: { 200: { description: "Saved", content: json({ type: "object" }) }, 422: errorResponse("Invalid settings") },
       },
     },
 

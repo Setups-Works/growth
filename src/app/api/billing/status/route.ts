@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { requireTenant } from "@/lib/auth/tenant";
-import { planMessageLimit, type BillingProfile } from "@/lib/billing/usage";
+import { billingEnforced, planMessageLimit, type BillingProfile } from "@/lib/billing/usage";
+import { allowanceLabel, formatPrice, getPlanCatalog } from "@/lib/billing/catalog";
+import { isAdminUser } from "@/lib/auth/admin";
+import { getSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +21,7 @@ export async function GET(request: Request) {
 
   const [profile] = await db()<ProfileRow[]>`
     select plan, subscription_status, current_period_end, grace_until, legacy_unlimited,
-           trial_ends_at, trial_used_at
+           trial_ends_at, trial_used_at, comp_until
     from profiles
     where id = ${userId}
   `;
@@ -31,9 +34,8 @@ export async function GET(request: Request) {
 
   // Same policy the send gate itself uses (checkSendAllowance) -- a profile
   // with no active plan gets a 0 limit here too, not the Go figure by default.
-  const limit = profile
-    ? planMessageLimit(profile)
-    : 0;
+  const [catalog, settings] = await Promise.all([getPlanCatalog(), getSettings()]);
+  const limit = profile ? planMessageLimit(profile, catalog) : 0;
 
   return NextResponse.json({
     plan: profile?.plan ?? null,
@@ -44,5 +46,21 @@ export async function GET(request: Request) {
     usage: { sent, limit },
     trialEndsAt: profile?.trial_ends_at?.toISOString() ?? null,
     trialAvailable: !profile?.trial_used_at,
+    compUntil: profile?.comp_until && profile.comp_until.getTime() > Date.now() ? profile.comp_until.toISOString() : null,
+    /** The tiers on offer, as the admin panel has them. */
+    plans: catalog.map((p) => ({
+      id: p.id,
+      name: p.name,
+      priceLabel: `${formatPrice(p.pricePaise)}/mo`,
+      detail: allowanceLabel(p),
+      trialDays: p.trialDays,
+      whatsapp: p.whatsapp,
+    })),
+    /** Razorpay's public key id, for Checkout.js — read at runtime, not baked into the bundle. */
+    checkoutKey: process.env.RAZORPAY_KEY_ID ?? process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? null,
+    billingEnabled: billingEnforced(),
+    isAdmin: await isAdminUser(userId),
+    announcement: settings.announcement.enabled && settings.announcement.message ? settings.announcement : null,
+    supportEmail: settings.supportEmail || null,
   });
 }

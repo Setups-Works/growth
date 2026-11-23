@@ -6,6 +6,20 @@
 
 @theme inline {
   --color-background: var(--background);
+  --color-paper: var(--paper);
+  --color-side: var(--side);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-hover: var(--hover);
+  --color-press: var(--press);
+  --color-data: var(--data);
+  --color-success: var(--success);
+  --shadow-popover: var(--shadow-pop);
   --color-foreground: var(--foreground);
   /*
    * These must point at the next/font variables declared in layout.tsx.
@@ -171,142 +185,154 @@
     transform: translateZ(0) rotate(360deg);}}}
 
 /*
- * Chart slots 1–8 are the validated categorical palette: a fixed hue order that
- * clears CVD separation, the normal-vision floor and the lightness band in both
- * light and dark mode. Assign in order, never cycle, never recolour by rank.
- * Slots 6–8 are unavailable in the base shadcn theme, so they're declared here.
- */
-/*
- * Chrome is monochrome by intent: colour is reserved for data series and for
- * genuine state. A neutral shell keeps the eight-slot chart palette the only
- * saturated thing on screen, which is what makes it readable.
+ * Design language: "paper and ink".
+ *
+ * Near-monochrome by intent: white paper, charcoal ink, 1px hairlines, almost
+ * no shadows. Colour is reserved for data and for genuine state — so primary
+ * actions and selected states are ink, links and focus are the data blue, and
+ * the only other saturated things on screen are chart series and status.
+ * Two schemes: light and dark.
  */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  /* Setups Works blue (#2f66e8), on an otherwise black-and-white palette. One
-     accent colour means anything blue is deliberate — a link, a primary action,
-     a selected state — and never decoration. */
-  --primary: oklch(0.552 0.206 263.7);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.505 0 0);
-  --accent: oklch(0.965 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.212 27);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.145 0 0);
+  /* Surfaces and text */
+  --paper: #ffffff;
+  --side: #f7f7f7;
+  --raised: #ffffff;
+  --ink: #242424;
+  --ink-2: #5c5c5c;
+  --ink-3: #707070;
+  --ink-4: #8f8f8f;
+  --line: #ebebeb;
+  --line-2: #dedede;
+  --line-3: #8f8f8f;
+  --hover: #2424240d;
+  --press: #24242414;
+  /* Links, focus, first data series */
+  --data: #2563eb;
+  /* Filled buttons and selected states. White on it is 5.2:1 (AA). */
+  --brand: #2563eb;
+  --brand-ink: #ffffff;
+  --success: #2d8659;
+  --shadow-pop: 0 1px 2px #0000000f, 0 8px 28px #0000001a;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --focus-ring: color-mix(in srgb, var(--data) 55%, transparent);
+
+  /* shadcn roles, mapped onto the palette above */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--raised);
+  --card-foreground: var(--ink);
+  --popover: var(--raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-ink);
+  --secondary: #f3f3f3;
+  --secondary-foreground: var(--ink);
+  --muted: var(--side);
+  --muted-foreground: var(--ink-3);
+  --accent: #f3f3f3;
+  --accent-foreground: var(--ink);
+  --destructive: #bc2a41;
+  --border: var(--line);
+  --input: var(--line-2);
+  --ring: var(--data);
   --radius: 0.5rem;
 
-  --chart-1: #2a78d6;
-  --chart-2: #eb6834;
-  --chart-3: #1baf7a;
-  --chart-4: #eda100;
-  --chart-5: #e87ba4;
-  --chart-6: #008300;
-  --chart-7: #4a3aa7;
-  --chart-8: #e34948;
+  /* Muted "earthy" categorical palette: assign in order, never cycle. */
+  --chart-1: var(--data);
+  --chart-2: #6f8f62;
+  --chart-3: #c2923a;
+  --chart-4: #8a73a8;
+  --chart-5: #b86e8c;
+  --chart-6: #b9614f;
+  --chart-7: #7a8088;
+  --chart-8: #5b7fa6;
 
-  --good: #0ca30c;
-  --warning: #b45309;
-  --serious: #c2410c;
-  --critical: #d03b3b;
-  --grid: oklch(0.93 0 0);
+  --good: var(--success);
+  --warning: #d68910;
+  --serious: #b5593a;
+  --critical: #bc2a41;
+  --grid: var(--line);
 
   /* Single-hue sequential ramp for magnitude (heatmaps, cohort matrix). */
-  --ramp-0: #cde2fb;
-  --ramp-1: #b7d3f6;
-  --ramp-2: #9ec5f4;
-  --ramp-3: #86b6ef;
-  --ramp-4: #6da7ec;
-  --ramp-5: #5598e7;
-  --ramp-6: #3987e5;
-  --ramp-7: #2a78d6;
-  --ramp-8: #256abf;
-  --ramp-9: #1c5cab;
+  --ramp-0: #eff6ff;
+  --ramp-1: #dbeafe;
+  --ramp-2: #bfdbfe;
+  --ramp-3: #93c5fd;
+  --ramp-4: #60a5fa;
+  --ramp-5: #3b82f6;
+  --ramp-6: #2563eb;
+  --ramp-7: #1d4ed8;
+  --ramp-8: #1e40af;
+  --ramp-9: #1e3a8a;
   /* Ink that stays legible against the light and dark ends of the ramp. */
-  --ramp-ink-low: #0b0b0b;
+  --ramp-ink-low: var(--ink);
   --ramp-ink-high: #ffffff;
   --ramp-ink-threshold: 0.6;
 
-  --sidebar: oklch(0.988 0 0);
-  --sidebar-foreground: oklch(0.205 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.955 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.145 0 0);
+  --sidebar: var(--side);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: #ececec;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--data);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.215 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  /* The lighter brand step in dark mode: #2f66e8 on near-black does not carry
-     enough contrast for text sitting on it. */
-  --primary: oklch(0.639 0.179 262.4);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.27 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.27 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.285 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.68 0.19 25);
-  --border: oklch(1 0 0 / 11%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.87 0 0);
+  --paper: #191919;
+  --side: #202020;
+  --raised: #232323;
+  --ink: #ebebeb;
+  --ink-2: #b3b3b3;
+  --ink-3: #8a8a8a;
+  --ink-4: #737373;
+  --line: #ffffff14;
+  --line-2: #ffffff21;
+  --line-3: #ffffff57;
+  --hover: #ffffff0d;
+  --press: #ffffff17;
+  --data: #60a5fa;
+  /* A lighter blue so it reads on the dark surface; dark text on it is 7.4:1. */
+  --brand: #60a5fa;
+  --brand-ink: #0b1220;
+  --success: #3dba77;
+  --shadow-pop: 0 1px 2px #0000004d, 0 10px 30px #00000073;
 
-  /* Same eight hues, stepped for the dark surface — not an automatic flip. */
-  --chart-1: #3987e5;
-  --chart-2: #d95926;
-  --chart-3: #199e70;
-  --chart-4: #c98500;
-  --chart-5: #d55181;
-  --chart-6: #4ba84b;
-  --chart-7: #9085e9;
-  --chart-8: #e66767;
+  --secondary: #2a2a2a;
+  --accent: #2a2a2a;
+  --destructive: #f47682;
 
-  --good: #0ca30c;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #e05a5a;
-  --grid: oklch(1 0 0 / 9%);
+  /* Same hues, lifted for the dark surface — not an automatic flip. */
+  --chart-2: #8fb07f;
+  --chart-3: #d6aa55;
+  --chart-4: #a690c4;
+  --chart-5: #cf8aa6;
+  --chart-6: #d07e6c;
+  --chart-7: #9aa0a8;
+  --chart-8: #7c9cc2;
 
-  /* Same hue, re-stepped for the dark surface rather than flipped. */
-  --ramp-0: #12233a;
-  --ramp-1: #173254;
-  --ramp-2: #1c4270;
-  --ramp-3: #20518b;
-  --ramp-4: #2461a6;
-  --ramp-5: #2a78d6;
-  --ramp-6: #3987e5;
-  --ramp-7: #5598e7;
-  --ramp-8: #86b6ef;
-  --ramp-9: #b7d3f6;
+  --warning: #e8a830;
+  --serious: #e07050;
+  --critical: #f47682;
+
+  --ramp-0: #0f1a33;
+  --ramp-1: #132447;
+  --ramp-2: #17305f;
+  --ramp-3: #1c3d7a;
+  --ramp-4: #224b97;
+  --ramp-5: #2a5bb8;
+  --ramp-6: #3b82f6;
+  --ramp-7: #60a5fa;
+  --ramp-8: #93c5fd;
+  --ramp-9: #bfdbfe;
   --ramp-ink-low: #ffffff;
-  --ramp-ink-high: #0d0d0d;
+  --ramp-ink-high: #191919;
   --ramp-ink-threshold: 0.75;
 
-  --sidebar: oklch(0.175 0 0);
-  --sidebar-foreground: oklch(0.955 0 0);
-  --sidebar-primary: oklch(0.985 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.27 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.87 0 0);
+  --sidebar-accent: #2a2a2a;
 }
 
 @layer base {
@@ -319,6 +345,15 @@
   }
   html {
     @apply font-sans;
+  }
+  /*
+   * A grid's default single column may shrink below its content's width.
+   * Without this, a page whose grid only gains columns at lg: (most of them)
+   * grows to the width of its widest table on a phone and scrolls sideways.
+   * Any explicit grid-cols-* utility still wins.
+   */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
   }
   /* Columns of figures must line up; standalone numbers keep proportional figures. */
   .tabular {

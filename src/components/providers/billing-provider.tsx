@@ -13,6 +13,19 @@ export interface BillingStatus {
   trialEndsAt: string | null;
   /** False once this account has ever authenticated a trial mandate, on either plan. */
   trialAvailable: boolean;
+  /** The tiers on offer, from the plan catalog the admin panel edits. */
+  plans: { id: "go" | "plus" | "lite"; name: string; priceLabel: string; detail: string; trialDays: number; whatsapp: boolean }[];
+  /** Razorpay's public key id for Checkout.js, or null when billing isn't set up. */
+  checkoutKey: string | null;
+  billingEnabled: boolean;
+  isAdmin: boolean;
+  announcement: {
+    message: string;
+    tone: "info" | "warning" | "success";
+    link: string | null;
+    linkLabel: string | null;
+  } | null;
+  supportEmail: string | null;
 }
 
 interface BillingState {

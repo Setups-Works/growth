@@ -11,6 +11,8 @@ import {
   PackageCheck,
   ReceiptText,
   Settings,
+  ShieldCheck,
+  UserRound,
   ShoppingCart,
   Sparkles,
   Users,
@@ -25,6 +27,8 @@ export interface NavItem {
   description: string;
   /** Hidden for a Lite (analytics-only) plan — matches src/proxy.ts's WHATSAPP_PAGES. */
   whatsapp?: boolean;
+  /** Shown only to admins (users.is_admin or ADMIN_EMAILS). */
+  admin?: boolean;
 }
 
 export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
@@ -158,10 +162,31 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
         href: "/settings",
         label: "Settings",
         icon: Settings,
-        description: "WooCommerce connection and data window",
+        description: "Your profile, store connection, WhatsApp, billing and security",
+      },
+      {
+        href: "/admin",
+        label: "Admin",
+        icon: ShieldCheck,
+        description: "Accounts, plans and pricing, payments, stores and the whole server",
+        admin: true,
       },
     ],
   },
 ];
 
-export const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
+/**
+ * Pages reached from the account menu rather than the sidebar. Listed so the
+ * page heading, the breadcrumb and search know about them.
+ */
+export const EXTRA_PAGES: NavItem[] = [
+  {
+    // Search only: a section of Settings, which gives the page its heading.
+    href: "/settings?section=profile",
+    label: "Your profile",
+    icon: UserRound,
+    description: "Your name, email and mobile number",
+  },
+];
+
+export const ALL_NAV_ITEMS = [...NAV_GROUPS.flatMap((g) => g.items), ...EXTRA_PAGES];

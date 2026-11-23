@@ -2,7 +2,7 @@
 
 import { AlertTriangle, ArrowRight, Loader2, PlugZap, Store , Database } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FetchProgressPanel } from "@/components/dashboard/fetch-progress";
 import { useAnalytics } from "@/components/providers/analytics-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,14 +12,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { AnalyticsResult } from "@/lib/analytics/types";
 
 /**
- * The page canvas: padding and the gap between stacked sections.
- *
- * `AnalyticsPage` applies this itself, so pages that render analytics get it
- * for free. Pages that don't (Settings) have to opt in, and forgetting left
- * their cards butted edge to edge with no page padding at all.
+ * The gap between stacked sections. Page padding, width and the heading come
+ * from PageFrame in the app layout, so every page gets them.
  */
 export function PageShell({ children }: { children: ReactNode }) {
-  return <div className="space-y-5 p-4 sm:p-6">{children}</div>;
+  return <div className="space-y-6">{children}</div>;
 }
 
 /**
@@ -45,7 +42,7 @@ export function AnalyticsPage({ children }: { children: (data: AnalyticsResult) 
 
   if (error && !data) {
     return (
-      <div className="p-4 sm:p-6">
+      <div>
         <Card className="mx-auto max-w-lg gap-4 p-6 text-center">
           <div className="mx-auto flex size-11 items-center justify-center rounded-full bg-[color-mix(in_oklab,var(--critical)_14%,transparent)]">
             <PlugZap className="size-5 text-[var(--critical)]" />
@@ -72,6 +69,8 @@ export function AnalyticsPage({ children }: { children: (data: AnalyticsResult) 
 
   return (
     <PageShell>
+      <ImportBanner onFinished={refresh} />
+
       {data.meta.warnings.length > 0 ? (
         <Alert>
           <AlertTriangle />
@@ -101,7 +100,7 @@ export function AnalyticsPage({ children }: { children: (data: AnalyticsResult) 
 
 function NotConnectedState() {
   return (
-    <div className="p-4 sm:p-6">
+    <div>
       <Card className="mx-auto max-w-lg gap-4 p-6 text-center">
         <div className="mx-auto flex size-11 items-center justify-center rounded-full bg-muted">
           <Store className="size-5 text-muted-foreground" />
@@ -127,7 +126,7 @@ function NotConnectedState() {
 
 function NotSyncedState() {
   return (
-    <div className="p-4 sm:p-6">
+    <div>
       <Card className="mx-auto max-w-lg gap-4 p-6 text-center">
         <div className="mx-auto flex size-11 items-center justify-center rounded-full bg-muted">
           <Database className="size-5" />
@@ -154,7 +153,7 @@ function NotSyncedState() {
 
 function LoadingState() {
   return (
-    <div className="space-y-5 p-4 sm:p-6">
+    <div className="space-y-6">
       <FetchProgressPanel />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
@@ -206,5 +205,69 @@ export function EmptySection({
       </div>
       {action}
     </div>
+  );
+}
+
+/**
+ * Shown while a first sync is still importing order history, so partial
+ * figures are never mistaken for complete ones. Checks every 15 seconds and
+ * refreshes the analytics once the import finishes.
+ */
+function ImportBanner({ onFinished }: { onFinished: () => void }) {
+  const [state, setState] = useState<{ backfillDone: boolean; orders: number; backfillThrough: string | null } | null>(null);
+  // Read through a ref so a new callback identity never restarts the checks.
+  const finished = useRef(onFinished);
+  useEffect(() => {
+    finished.current = onFinished;
+  }, [onFinished]);
+
+  useEffect(() => {
+    let stopped = false;
+    let wasImporting = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const check = async () => {
+      try {
+        const res = await fetch("/api/sync", { cache: "no-store" });
+        if (!res.ok) return;
+        const body = (await res.json()) as { backfillDone: boolean; orders: number; backfillThrough: string | null };
+        if (stopped) return;
+        setState(body);
+        if (!body.backfillDone) {
+          wasImporting = true;
+          timer = setTimeout(() => void check(), 15_000);
+        } else if (wasImporting) {
+          finished.current();
+        }
+      } catch {
+        /* the banner is informational; never break the page over it */
+      }
+    };
+    void check();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  if (!state || state.backfillDone) return null;
+
+  const through = state.backfillThrough
+    ? new Date(state.backfillThrough).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+    : null;
+
+  return (
+    <Alert>
+      <Loader2 className="animate-spin" />
+      <AlertTitle>Still importing your order history</AlertTitle>
+      <AlertDescription>
+        <p>
+          {state.orders.toLocaleString()} orders so far{through ? `, up to ${through}` : ""}. Figures are incomplete
+          until the import finishes — usually a few minutes.{" "}
+          <Link href="/onboarding/sync" className="underline underline-offset-2">
+            Watch progress
+          </Link>
+        </p>
+      </AlertDescription>
+    </Alert>
   );
 }

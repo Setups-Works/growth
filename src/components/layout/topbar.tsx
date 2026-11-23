@@ -28,14 +28,15 @@ export function Topbar() {
   const current = ALL_NAV_ITEMS.find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/85 px-3 backdrop-blur-md sm:px-4">
-      <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-1 h-5" />
+    <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-background/90 px-3 backdrop-blur-md sm:px-4">
+      <SidebarTrigger className="-ml-1 text-ink-3" />
+      <Separator orientation="vertical" className="mr-1 h-4" />
 
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-sm font-semibold tracking-tight">{current?.label ?? "Dashboard"}</h1>
-        <p className="hidden truncate text-[11px] text-muted-foreground sm:block">{current?.description}</p>
-      </div>
+      {/* Breadcrumb: the page's own heading carries the title and description. */}
+      <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-ink-2">
+        {current ? <current.icon className="size-3.5 shrink-0 text-ink-3" /> : null}
+        <span className="truncate font-medium text-foreground">{current?.label ?? "Dashboard"}</span>
+      </nav>
 
       <div className="flex items-center gap-1.5">
         <SearchTrigger />
@@ -97,7 +98,7 @@ function SearchTrigger() {
       type="button"
       onClick={() => palette.setOpen(true)}
       aria-label="Search customers, products and orders"
-      className="flex h-8 items-center gap-2 rounded-md border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent sm:w-56"
+      className="flex h-8 items-center gap-2 rounded-lg border border-line bg-background px-2.5 text-[13px] text-ink-3 transition-colors hover:bg-hover sm:w-60"
     >
       <Search className="size-3.5 shrink-0" />
       <span className="hidden flex-1 text-left sm:inline">Search…</span>

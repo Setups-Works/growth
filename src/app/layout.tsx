@@ -38,7 +38,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <TooltipProvider delayDuration={150}>{children}</TooltipProvider>
-          <Toaster position="bottom-right" richColors closeButton />
+          <Toaster closeButton />
         </ThemeProvider>
       </body>
     </html>

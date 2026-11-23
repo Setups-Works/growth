@@ -1,4 +1,5 @@
 import { db } from "@/lib/db/client";
+import { DEFAULT_CATALOG, getPlanCatalog, type CatalogPlan } from "@/lib/billing/catalog";
 
 /**
  * The monthly message-send gate.
@@ -9,8 +10,6 @@ import { db } from "@/lib/db/client";
  * There are exactly five call sites; see AGENTS.md / the billing plan for
  * the full list.
  */
-
-const GO_MONTHLY_LIMIT = 10_000;
 
 /** "lite" is analytics only — see planIncludesWhatsApp below for the gate this drives. */
 export type PlanId = "go" | "plus" | "lite";
@@ -28,6 +27,8 @@ export interface BillingProfile {
   grace_until: Date | null;
   legacy_unlimited: boolean;
   trial_ends_at: Date | null;
+  /** A plan an admin granted for free, until this moment. */
+  comp_until?: Date | null;
 }
 
 function currentPeriod(): string {
@@ -67,13 +68,17 @@ export function billingEnforced(): boolean {
   return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 }
 
-export function planMessageLimit(profile: BillingProfile): number | null {
+export function planMessageLimit(
+  profile: BillingProfile,
+  catalog: Pick<CatalogPlan, "id" | "messageLimit" | "whatsapp">[] = DEFAULT_CATALOG,
+): number | null {
   if (!billingEnforced() || profile.legacy_unlimited) return null;
   // Lite has no WhatsApp allowance at all, regardless of subscription status
   // -- there is no "usable Lite subscription that can still send," unlike Go
   // past_due getting a grace window. See planIncludesWhatsApp for the same
   // policy applied to page/route access rather than the send count.
-  if (profile.plan === "lite") return 0;
+  const tier = catalog.find((p) => p.id === profile.plan);
+  if (tier && (!tier.whatsapp || tier.messageLimit === 0)) return 0;
 
   const inGrace = profile.grace_until !== null && profile.grace_until.getTime() > Date.now();
   // `authenticated` is Razorpay's own status for "mandate set up, first
@@ -86,10 +91,13 @@ export function planMessageLimit(profile: BillingProfile): number | null {
     profile.subscription_status === "authenticated" &&
     profile.trial_ends_at !== null &&
     profile.trial_ends_at.getTime() > Date.now();
-  const usable = profile.plan !== null && (profile.subscription_status === "active" || inGrace || inTrial);
+  const comped = profile.comp_until != null && profile.comp_until.getTime() > Date.now();
+  const usable =
+    profile.plan !== null && (profile.subscription_status === "active" || inGrace || inTrial || comped);
 
   if (!usable) return 0;
-  return profile.plan === "plus" ? null : GO_MONTHLY_LIMIT;
+  // The cap is whatever the admin panel set for this tier (billing_plans).
+  return tier ? tier.messageLimit : 0;
 }
 
 /**
@@ -106,7 +114,7 @@ export function planMessageLimit(profile: BillingProfile): number | null {
  */
 export async function checkSendAllowance(userId: string, count = 1): Promise<SendAllowance> {
   const rows = await db()<BillingProfile[]>`
-    select plan, subscription_status, grace_until, legacy_unlimited, trial_ends_at
+    select plan, subscription_status, grace_until, legacy_unlimited, trial_ends_at, comp_until
     from profiles
     where id = ${userId}
   `;
@@ -114,7 +122,7 @@ export async function checkSendAllowance(userId: string, count = 1): Promise<Sen
 
   if (!profile) return { allowed: false, remaining: 0, reason: "No account found." };
 
-  const limit = planMessageLimit(profile);
+  const limit = planMessageLimit(profile, await getPlanCatalog());
   if (limit === null) return { allowed: true, remaining: null };
 
   if (limit === 0) {
@@ -134,7 +142,7 @@ export async function checkSendAllowance(userId: string, count = 1): Promise<Sen
   const remaining = Math.max(0, limit - sent);
 
   if (remaining <= 0) {
-    return { allowed: false, remaining: 0, reason: "This month's 10,000-message limit has been reached." };
+    return { allowed: false, remaining: 0, reason: `This month's ${limit.toLocaleString("en-IN")}-message limit has been reached.` };
   }
   return { allowed: remaining >= count, remaining };
 }
@@ -161,9 +169,12 @@ export async function recordSend(userId: string, count = 1): Promise<void> {
  * alone. src/proxy.ts is the caller — see WHATSAPP_PAGES / WHATSAPP_API
  * there for what this gates.
  */
-export function planIncludesWhatsApp(profile: Pick<BillingProfile, "plan" | "legacy_unlimited">): boolean {
+export function planIncludesWhatsApp(
+  profile: Pick<BillingProfile, "plan" | "legacy_unlimited">,
+  catalog: Pick<CatalogPlan, "id" | "whatsapp">[] = DEFAULT_CATALOG,
+): boolean {
   if (!billingEnforced() || profile.legacy_unlimited) return true;
-  return profile.plan === "go" || profile.plan === "plus";
+  return catalog.find((p) => p.id === profile.plan)?.whatsapp ?? false;
 }
 
 /**
@@ -178,5 +189,5 @@ export async function hasWhatsAppPlan(userId: string): Promise<boolean> {
     select plan, legacy_unlimited from profiles where id = ${userId}
   `;
   if (!profile) return false;
-  return planIncludesWhatsApp(profile);
+  return planIncludesWhatsApp(profile, await getPlanCatalog());
 }

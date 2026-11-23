@@ -26,7 +26,7 @@ export async function currentUser(): Promise<CurrentUser | null> {
     const [row] = await db()<{ id: string; email: string; full_name: string | null; avatar_url: string | null }[]>`
       select u.id, u.email, p.full_name, p.avatar_url
       from users u left join profiles p on p.id = u.id
-      where u.id = ${session.userId}
+      where u.id = ${session.userId} and u.suspended_at is null
     `;
     if (!row) return null;
     return { id: row.id, email: row.email, name: row.full_name, avatarUrl: row.avatar_url };

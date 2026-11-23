@@ -433,7 +433,15 @@ async function writeOrders(storeId: string, orders: WooOrder[]): Promise<void> {
   for (let i = 0; i < orders.length; i += BATCH) {
     const chunk = orders.slice(i, i + BATCH);
 
-    await db()`
+    /*
+     * Only rows that actually changed are rewritten. Every sync re-reads an
+     * overlap window (and a full re-import re-reads everything); rewriting
+     * identical rows left a dead copy of each behind, which is what made the
+     * tables several times bigger than their data. The `where` on the update
+     * skips unchanged rows, and `returning` names only the inserted or
+     * changed orders, so their line items are the only ones replaced.
+     */
+    const changed = await db()<{ id: number }[]>`
       insert into woo_orders ${db()(
         chunk.map((o) => ({
           store_id: storeId,
@@ -470,14 +478,19 @@ async function writeOrders(storeId: string, orders: WooOrder[]): Promise<void> {
         item_count = excluded.item_count,
         raw = excluded.raw,
         synced_at = now()
+      where (woo_orders.status, woo_orders.date_modified, woo_orders.raw)
+            is distinct from (excluded.status, excluded.date_modified, excluded.raw)
+      returning id
     `;
+    if (changed.length === 0) continue;
 
-    // Line items are replaced for the orders in this chunk: an order can lose
+    // Line items are replaced for the orders that changed: an order can lose
     // a line to a refund, and an upsert alone would leave the removed row.
-    const ids = chunk.map((o) => o.id);
+    const ids = changed.map((r) => Number(r.id));
+    const changedSet = new Set(ids);
     await db()`delete from woo_order_items where store_id = ${storeId} and order_id in ${db()(ids)}`;
 
-    const items = chunk.flatMap((o) =>
+    const items = chunk.filter((o) => changedSet.has(o.id)).flatMap((o) =>
       (o.line_items ?? []).map((li) => ({
         store_id: storeId,
         order_id: o.id,
@@ -532,6 +545,12 @@ async function writeCustomers(storeId: string, customers: WooCustomer[]): Promis
         orders_count = excluded.orders_count, total_spent = excluded.total_spent,
         date_modified = excluded.date_modified, raw = excluded.raw,
         synced_at = now()
+      -- Skip identical rows (see writeOrders): customers are re-read on every sync.
+      where (woo_customers.email, woo_customers.first_name, woo_customers.last_name, woo_customers.has_phone,
+             woo_customers.orders_count, woo_customers.total_spent, woo_customers.date_modified, woo_customers.raw)
+            is distinct from
+            (excluded.email, excluded.first_name, excluded.last_name, excluded.has_phone,
+             excluded.orders_count, excluded.total_spent, excluded.date_modified, excluded.raw)
     `;
   }
 }
@@ -564,6 +583,8 @@ async function writeProducts(storeId: string, products: WooProduct[]): Promise<v
         stock_status = excluded.stock_status, total_sales = excluded.total_sales,
         date_modified = excluded.date_modified, raw = excluded.raw,
         synced_at = now()
+      where (woo_products.stock_quantity, woo_products.total_sales, woo_products.date_modified, woo_products.raw)
+            is distinct from (excluded.stock_quantity, excluded.total_sales, excluded.date_modified, excluded.raw)
     `;
   }
 }

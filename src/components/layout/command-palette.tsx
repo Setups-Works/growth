@@ -13,6 +13,7 @@ import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ALL_NAV_ITEMS } from "@/components/layout/nav-items";
+import { useBilling } from "@/components/providers/billing-provider";
 import {
   RANGE_PRESETS,
   useAnalytics,
@@ -48,6 +49,7 @@ export function CommandPalette({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const isAdmin = useBilling().status?.isAdmin ?? false;
   const router = useRouter();
   const { data, refresh, setPreset } = useAnalytics();
   const { setTheme, resolvedTheme } = useTheme();
@@ -208,7 +210,8 @@ export function CommandPalette({
           <CommandGroup heading="Go to">
             {ALL_NAV_ITEMS.filter(
               (item) =>
-                needle.length < 2 || item.label.toLowerCase().includes(needle),
+                (!item.admin || isAdmin) &&
+                (needle.length < 2 || item.label.toLowerCase().includes(needle)),
             ).map((item) => (
               <CommandItem
                 key={item.href}

@@ -6,7 +6,7 @@ import { BorderBeam } from "@/components/ui/border-beam";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Section, SectionHeading } from "@/components/marketing/sections";
-import { PLANS } from "@/lib/marketing/plans";
+import { getMarketingPlans } from "@/lib/marketing/plans";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,7 +30,8 @@ export interface PricingProps {
   footer?: boolean;
 }
 
-export function Pricing({ heading = true, footer = heading }: PricingProps = {}) {
+export async function Pricing({ heading = true, footer = heading }: PricingProps = {}) {
+  const PLANS = await getMarketingPlans();
   return (
     <Section id="pricing" className={cn(heading && "bg-muted/20")}>
       {heading ? (
@@ -104,7 +105,7 @@ export function Pricing({ heading = true, footer = heading }: PricingProps = {})
       </div>
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
-        Billed monthly by UPI Autopay. Cancel anytime — nothing else is charged after.{" "}
+        Billed monthly by UPI Autopay or card. Cancel anytime — nothing else is charged after.{" "}
         {footer ? (
           <Link
             href="/pricing"

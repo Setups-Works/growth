@@ -4,6 +4,8 @@ import { FetchProgressBar } from "@/components/dashboard/fetch-progress";
 import { CommandPaletteProvider } from "@/components/layout/command-palette-context";
 import { KeyboardShortcuts } from "@/components/layout/keyboard-shortcuts";
 import { SubscriptionBanner } from "@/components/layout/subscription-banner";
+import { AnnouncementBanner } from "@/components/layout/announcement-banner";
+import { PageFrame } from "@/components/layout/page-frame";
 import { Topbar } from "@/components/layout/topbar";
 import { AnalyticsProvider } from "@/components/providers/analytics-provider";
 import { BillingProvider } from "@/components/providers/billing-provider";
@@ -18,8 +20,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <AppSidebar />
             <SidebarInset className="min-w-0">
               <Topbar />
+              <AnnouncementBanner />
               <SubscriptionBanner />
-              <main className="min-w-0 flex-1">{children}</main>
+              {/* SidebarInset is already the page's <main>; one per page. */}
+              <div className="min-w-0 flex-1">
+                <PageFrame>{children}</PageFrame>
+              </div>
             </SidebarInset>
             <FetchProgressBar />
             <KeyboardShortcuts />

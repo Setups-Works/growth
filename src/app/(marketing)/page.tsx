@@ -15,6 +15,9 @@ import { TrustedBy } from "@/components/marketing/landing/trusted-by";
 import { WhyBento } from "@/components/marketing/landing/why-bento";
 import { landingSchema, SITE_DESCRIPTION } from "@/lib/marketing/schema";
 
+/** Prices come from the plan catalog (Admin → Plans); refreshed at most once a minute. */
+export const revalidate = 60;
+
 export const metadata: Metadata = {
   // Absolute: the layout's "%s · Setups Works Growth" template would repeat the name.
   title: { absolute: "Growth by Setups Works — AI Commerce Intelligence for WooCommerce" },

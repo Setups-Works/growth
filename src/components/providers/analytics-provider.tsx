@@ -84,19 +84,34 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const [nonce, setNonce] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
+  /*
+   * Rolling presets ("Last 7 days" …) are resolved against today every time,
+   * never pinned. A pinned pair went stale: chosen while a first sync had only
+   * reached last year, "Last 7 days" stayed a week of last year — and was
+   * saved in localStorage, so it outlived the sync that would have fixed it.
+   * `today` re-evaluates the range when the date changes.
+   */
+  const today = toIso(new Date());
   const queryParams = useMemo(() => {
     const params: { from?: string; to?: string; granularity?: Granularity; all?: boolean } = {};
+    const rolling = RANGE_PRESETS.find((p) => p.id === presetId && p.days !== null);
     if (presetId === "all") {
       // Resolved fresh by the server on every request — see setPreset below
       // for why this must not be a from/to pinned here on the client.
       params.all = true;
+    } else if (rolling?.days) {
+      const end = new Date(`${today}T00:00:00`);
+      const start = new Date(end);
+      start.setDate(start.getDate() - (rolling.days - 1));
+      params.from = toIso(start);
+      params.to = today;
     } else if (range) {
       params.from = range.from;
       params.to = range.to;
     }
     if (granularity !== "auto") params.granularity = granularity;
     return params;
-  }, [presetId, range, granularity]);
+  }, [presetId, range, granularity, today]);
 
   const fetchData = useCallback(
     async (opts: { refresh?: boolean } = {}) => {
@@ -188,18 +203,11 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Anchor to the newest data we hold, not to wall-clock today: a store
-      // that stopped syncing yesterday should still show its last 30 days.
-      const bounds = data?.meta.dataBounds;
-      const end = bounds ? new Date(bounds.to) : new Date();
-      const start = new Date(end);
-      start.setDate(start.getDate() - (preset.days - 1));
-      const nextRange = { from: toIso(start), to: toIso(end) };
-      if (bounds && nextRange.from < bounds.from) nextRange.from = bounds.from;
-
-      setView({ presetId: id, range: nextRange, granularity });
+      // Rolling presets are resolved against today in queryParams, so only
+      // the preset is saved — never a date pair that can go stale.
+      setView({ presetId: id, range: null, granularity });
     },
-    [data?.meta.dataBounds, granularity, setView],
+    [granularity, setView],
   );
 
   const setCustomRange = useCallback(

@@ -11,6 +11,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      position="bottom-center"
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />
@@ -30,10 +31,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
+          // Paper-and-ink toast: a dark ink pill with paper text, in both schemes.
+          "--normal-bg": "var(--ink)",
+          "--normal-text": "var(--paper)",
+          "--normal-border": "transparent",
+          "--border-radius": "12px",
         } as React.CSSProperties
       }
       toastOptions={{

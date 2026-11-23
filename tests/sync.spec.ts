@@ -109,6 +109,24 @@ test("a first sync fetches products, then orders, then customers — and saves a
     // Names are decoded on the way in.
     const [item] = await db()<{ name: string }[]>`select name from woo_order_items where store_id = ${row.id} limit 1`;
     expect(item.name).toBe("Tee & Cap");
+
+    // Re-importing identical data rewrites nothing: each row keeps its
+    // version (xmin), so no dead copies pile up and the tables stay small.
+    const versions = async () =>
+      db()<{ t: string; v: string }[]>`
+        select 'o' || id as t, xmin::text as v from woo_orders where store_id = ${row.id}
+        union all select 'c' || id, xmin::text from woo_customers where store_id = ${row.id}
+        union all select 'i' || order_id || '-' || id, xmin::text from woo_order_items where store_id = ${row.id}
+        order by 1`;
+    const before = await versions();
+    let again = await syncStore(row.id, config, { full: true });
+    for (let i = 0; i < 5 && !again.done; i++) again = await syncStore(row.id, config);
+    expect(again.done).toBe(true);
+    expect(await versions()).toEqual(before);
+
+    // Customers keep only what is read.
+    const [customer] = await db()<{ raw: Record<string, unknown> }[]>`select raw from woo_customers where store_id = ${row.id} limit 1`;
+    expect(Object.keys(customer.raw).sort()).toEqual(["date_created", "email", "first_name", "id", "last_name"]);
   } finally {
     store.close();
   }

@@ -1,4 +1,5 @@
 import type { PlanId } from "@/lib/billing/usage";
+import { DEFAULT_CATALOG, formatPrice, getPlanCatalog, type CatalogPlan } from "@/lib/billing/catalog";
 
 /**
  * Pricing, in one place.
@@ -26,6 +27,7 @@ export interface Plan {
   id: PlanId;
   name: string;
   price: string;
+  pricePaise: number;
   cadence: string;
   blurb: string;
   highlight: boolean;
@@ -36,57 +38,30 @@ export interface Plan {
   whatsapp: boolean;
 }
 
-export const PLANS: Plan[] = [
-  {
-    id: "lite",
-    name: "Lite",
-    price: "₹1,999",
-    cadence: "per month",
-    blurb: "For a store that wants the analytics, not the messaging.",
-    highlight: false,
-    cta: "Start free",
+/** The catalog (src/lib/billing/catalog.ts, edited in Admin → Plans) as the marketing pages show it. */
+export function toMarketingPlans(catalog: CatalogPlan[]): Plan[] {
+  return catalog.map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: formatPrice(p.pricePaise),
+    pricePaise: p.pricePaise,
+    cadence: p.cadence,
+    blurb: p.blurb,
+    highlight: p.highlight,
+    cta: p.trialDays > 0 ? "Start free" : "Get started",
     href: "/signup",
-    whatsapp: false,
-    limits: [
-      "Every analytics module — RFM, cohorts, LTV, products, inventory",
-      "Report exports (PDF, Excel, CSV)",
-      "No WhatsApp campaigns, flows, inbox, order confirmations or assistant",
-      "UPI Autopay billing, cancel anytime",
-    ],
-  },
-  {
-    id: "go",
-    name: "Go",
-    price: "₹3,999",
-    cadence: "per month",
-    blurb: "For a store sending campaigns and flows at a steady pace.",
-    highlight: false,
-    cta: "Start free",
-    href: "/signup",
-    whatsapp: true,
-    limits: [
-      "10,000 WhatsApp messages per month",
-      "Every feature included — analytics, campaigns, flows, the assistant",
-      "UPI Autopay billing, cancel anytime",
-    ],
-  },
-  {
-    id: "plus",
-    name: "Plus",
-    price: "₹5,999",
-    cadence: "per month",
-    blurb: "For a store that doesn't want to think about a message count.",
-    highlight: true,
-    cta: "Start free",
-    href: "/signup",
-    whatsapp: true,
-    limits: [
-      "Unlimited WhatsApp messages",
-      "Every feature included — analytics, campaigns, flows, the assistant",
-      "UPI Autopay billing, cancel anytime",
-    ],
-  },
-];
+    whatsapp: p.whatsapp,
+    limits: p.features,
+  }));
+}
+
+/** The defaults, for code that can't wait on the database (structured data at build time). */
+export const PLANS: Plan[] = toMarketingPlans(DEFAULT_CATALOG);
+
+/** The live catalog, for server-rendered pricing. Falls back to the defaults without a database. */
+export async function getMarketingPlans(): Promise<Plan[]> {
+  return toMarketingPlans(await getPlanCatalog());
+}
 
 /** In every tier, Lite included. */
 export const ANALYTICS_MODULES = [

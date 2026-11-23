@@ -30,12 +30,6 @@ interface Invoice {
   downloadUrl: string;
 }
 
-const PLANS = [
-  { id: "lite" as const, label: "Lite", priceLabel: "₹1,999/mo", detail: "Analytics only — no WhatsApp" },
-  { id: "go" as const, label: "Go", priceLabel: "₹3,999/mo", detail: "10,000 WhatsApp messages/month" },
-  { id: "plus" as const, label: "Plus", priceLabel: "₹5,999/mo", detail: "Unlimited WhatsApp messages" },
-];
-
 const STATUS_LABEL: Record<BillingStatus["subscriptionStatus"], string> = {
   none: "No plan",
   created: "Awaiting mandate",
@@ -56,7 +50,7 @@ declare global {
  * Plan, usage this month, and invoice history.
  *
  * The only payment UI here is a button that opens Razorpay's own hosted
- * Checkout — the UPI mandate itself is collected there, never in a form this
+ * Checkout — the UPI or card mandate itself is collected there, never in a form this
  * app builds. See src/lib/billing/razorpay.ts for why.
  */
 export function BillingCard() {
@@ -89,19 +83,32 @@ export function BillingCard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Could not start checkout.");
+      // A proxy error or a restart can answer with no body at all.
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          json.error ??
+            (res.status >= 500 ? "The server didn't respond properly. Wait a moment and try again." : "Could not start checkout."),
+        );
+      }
 
+      if (!status?.checkoutKey) throw new Error("Billing is not set up on this server yet.");
       if (!checkoutReady || !window.Razorpay) {
         throw new Error("Payment widget is still loading. Try again in a moment.");
       }
 
       new window.Razorpay({
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: status.checkoutKey,
         subscription_id: json.subscriptionId,
-        // Restricts the widget to UPI — this app only supports UPI Autopay,
-        // not cards or netbanking, so there's no reason to offer them.
-        config: { display: { blocks: { upi: { instruments: [{ method: "upi" }] } }, sequence: ["block.upi"], preferences: { show_default_blocks: false } } },
+        // The Razorpay account is shared with other websites; say which one this is.
+        name: "Setups Works Growth",
+        description: `${status.plans.find((p) => p.id === plan)?.name ?? plan} plan`,
+        // Every method Razorpay supports for recurring payments on this
+        // account: UPI Autopay, cards (debit and credit) and e-mandate.
+        // Prefilled from the account so the customer types less, and so a
+        // card mandate has the phone number it needs for OTPs.
+        prefill: json.prefill ?? undefined,
+        theme: { color: "#2563eb" },
         handler: () => {
           toast.success(
             json.trialDays > 0
@@ -165,6 +172,15 @@ export function BillingCard() {
           <p className="text-xs text-muted-foreground">Loading…</p>
         ) : (
           <>
+            {status.supportEmail ? (
+              <p className="text-xs text-muted-foreground">
+                Questions about billing? Email{" "}
+                <a className="text-data underline-offset-2 hover:underline" href={`mailto:${status.supportEmail}`}>
+                  {status.supportEmail}
+                </a>
+                .
+              </p>
+            ) : null}
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -172,7 +188,7 @@ export function BillingCard() {
                     {status.legacyUnlimited
                       ? "Unlimited (grandfathered)"
                       : status.plan
-                        ? PLANS.find((p) => p.id === status.plan)?.label
+                        ? (status.plans.find((p) => p.id === status.plan)?.name ?? status.plan)
                         : "No plan"}
                   </p>
                   {!status.legacyUnlimited && status.plan ? (
@@ -231,16 +247,18 @@ export function BillingCard() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              {PLANS.map((plan) => {
+              {status.plans.map((plan) => {
                 const isCurrent =
                   status.plan === plan.id &&
                   (status.subscriptionStatus === "active" || status.subscriptionStatus === "authenticated");
                 return (
                   <div key={plan.id} className="space-y-2 rounded-lg border p-3">
                     <div className="flex items-baseline justify-between">
-                      <p className="text-sm font-medium">{plan.label}</p>
-                      <p className="text-sm font-semibold">
-                        {status.trialAvailable && !isCurrent ? `14 days free, then ${plan.priceLabel}` : plan.priceLabel}
+                      <p className="text-sm font-medium">{plan.name}</p>
+                      <p className="text-right text-sm font-semibold">
+                        {status.trialAvailable && plan.trialDays > 0 && !isCurrent
+                          ? `${plan.trialDays} days free, then ${plan.priceLabel}`
+                          : plan.priceLabel}
                       </p>
                     </div>
                     <p className="text-[11px] text-muted-foreground">{plan.detail}</p>
@@ -255,7 +273,7 @@ export function BillingCard() {
                       {subscribing === plan.id ? <Loader2 className="size-3.5 animate-spin" /> : null}
                       {isCurrent
                         ? "Current plan"
-                        : status.trialAvailable
+                        : status.trialAvailable && plan.trialDays > 0
                           ? "Start free trial"
                           : status.plan
                             ? "Switch to this plan"

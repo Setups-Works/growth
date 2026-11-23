@@ -13,6 +13,15 @@ test("the home page introduces the product and offers sign-in", async ({ page })
   await expect(page.getByRole("link", { name: /log in|sign in/i }).first()).toBeVisible();
 });
 
+test("sign-up checks each field and names the one that's wrong", async ({ page }) => {
+  const base = { name: "Asha K", email: `su-${Date.now()}@example.com`, phone: "98765 43210", password: "a-long-password-1" };
+  for (const [field, value] of [["name", "x"], ["email", "nope"], ["phone", "12345"], ["password", "short"]] as const) {
+    const res = await page.request.post("/api/auth/signup", { data: { ...base, [field]: value } });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).field).toBe(field);
+  }
+});
+
 test("signed out, the dashboard redirects to sign-in", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login\?next=%2Fdashboard/);
@@ -21,7 +30,12 @@ test("signed out, the dashboard redirects to sign-in", async ({ page }) => {
 
 test("a new account lands on the connect form, which refuses a plainly invalid URL", async ({ page }) => {
   const res = await page.request.post("/api/auth/signup", {
-    data: { email: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: "e2e-password-1" },
+    data: {
+      name: "E2E Tester",
+      email: `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`,
+      phone: "9876543210",
+      password: "e2e-password-1",
+    },
   });
   expect(res.ok()).toBeTruthy();
 

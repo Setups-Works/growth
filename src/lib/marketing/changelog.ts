@@ -36,6 +36,26 @@ export const CHANGELOG: ChangelogRelease[] = [
     changes: [
       {
         kind: "new",
+        text: "Settings → Profile, to see and update your name, email and mobile number (also in the account menu as Your profile).",
+      },
+      {
+        kind: "improved",
+        text: "Plans can now be paid by debit or credit card as well as UPI Autopay.",
+      },
+      {
+        kind: "improved",
+        text: "Sign-up asks for your name and mobile number, checks each field as you go, and fills them in for you at checkout.",
+      },
+      {
+        kind: "improved",
+        text: "Plan prices, trial lengths and message allowances now come from one place, so the pricing page, Settings → Billing and checkout always agree.",
+      },
+      {
+        kind: "fixed",
+        text: "Subscribing from Settings → Billing no longer fails with \"payment widget is still loading\" on servers where the checkout key wasn't built into the page.",
+      },
+      {
+        kind: "new",
         text: "PulseCommerce is now Growth by Setups Works — same product, new name.",
       },
       {

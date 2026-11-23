@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { hashWebhookBody, verifyWebhookSignature } from "@/lib/billing/razorpay";
+import { GROWTH_APP_TAG, hashWebhookBody, tagOf, verifyWebhookSignature } from "@/lib/billing/razorpay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   let event: {
     event: string;
     payload: {
-      subscription?: { entity: { id: string; status: string; plan_id: string; current_end: number } };
+      subscription?: { entity: { id: string; status: string; plan_id: string; current_end: number; notes?: unknown } };
       payment?: { entity: { id: string; amount: number; currency: string } };
     };
   };
@@ -41,6 +41,25 @@ export async function POST(request: Request) {
     event = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  /*
+   * This Razorpay account is shared with other websites, and Razorpay sends
+   * every event on the account to every webhook endpoint. Only subscription
+   * events concern this app, and only for subscriptions it created: tagged
+   * notes.app = "growth" (everything since tagging began), or already held
+   * by a profile here (older, untagged ones). Anything else belongs to
+   * another site and is acknowledged with a 200 and otherwise ignored —
+   * not stored, and never an error, since Razorpay disables an endpoint that
+   * keeps failing.
+   */
+  const subEntity = event.payload.subscription?.entity;
+  if (!subEntity) return NextResponse.json({ ok: true, ignored: "not a subscription event" });
+  const tag = tagOf(subEntity.notes);
+  if (tag && tag !== GROWTH_APP_TAG) return NextResponse.json({ ok: true, ignored: "another site" });
+  if (!tag) {
+    const known = await db()`select 1 from profiles where razorpay_subscription_id = ${subEntity.id}`;
+    if (known.length === 0) return NextResponse.json({ ok: true, ignored: "unknown subscription" });
   }
 
   // Razorpay delivers at-least-once; a retried delivery is byte-identical, so
@@ -55,7 +74,7 @@ export async function POST(request: Request) {
 
   switch (event.event) {
     case "subscription.authenticated": {
-      // Fires once the UPI mandate is actually set up — for a trial
+      // Fires once the UPI or card mandate is actually set up — for a trial
       // subscription (start_at in the future) this is the moment the trial
       // genuinely begins, well before the first charge; for an immediate
       // subscription it's a brief intermediate state on the way to
@@ -120,9 +139,12 @@ export async function POST(request: Request) {
       break;
     }
 
+    // subscription.pending is Razorpay's "a charge failed, retrying" for a
+    // subscription; payment.failed rarely carries the subscription at all.
+    case "subscription.pending":
     case "payment.failed": {
       if (!subscriptionId) break;
-      // 3-day grace: UPI debits bounce transiently (balance timing) and
+      // 3-day grace: UPI and card debits bounce transiently (balance timing) and
       // Razorpay itself retries — cutting someone off on the first bounce of
       // a mandate they already approved would be needlessly aggressive.
       await db()`

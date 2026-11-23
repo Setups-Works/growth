@@ -42,7 +42,15 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b">
-        <Link href="/dashboard" className="flex items-center gap-2.5 px-1.5 py-1.5">
+        {/*
+         * Collapsed, the rail leaves 32px inside its padding — exactly the
+         * width of the menu icons below. The tile shrinks to that and drops
+         * its side padding so it lines up with them instead of being clipped.
+         */}
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2.5 px-1.5 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+        >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <TrendingUp className="size-4.5" strokeWidth={2.5} />
           </span>
@@ -56,7 +64,7 @@ export function AppSidebar() {
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.items.map((item) => {
+                {group.items.filter((item) => !item.admin || status?.isAdmin).map((item) => {
                   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                   const locked = isLite && item.whatsapp;
                   return (

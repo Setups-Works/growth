@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Create your account · Setups Works 
 
 export default function Page() {
   return (
-    <main className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-16">
+    <main className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-10 sm:py-16">
       <Link href="/" className="mb-8 flex items-center gap-2.5">
         <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <TrendingUp className="size-5" strokeWidth={2.5} />
@@ -18,10 +18,12 @@ export default function Page() {
         <BrandName />
       </Link>
 
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-base">Create your account</CardTitle>
-          <CardDescription className="text-xs">You will connect WooCommerce and WhatsApp next.</CardDescription>
+          <CardTitle className="text-lg">Create your account</CardTitle>
+          <CardDescription className="text-[13px]">
+            Start with a free trial. You&apos;ll connect WooCommerce and WhatsApp next.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* useSearchParams needs a boundary, or the whole route opts out of

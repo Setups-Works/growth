@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MIN_PASSWORD, postJson } from "@/lib/auth/client";
+import { SignUpForm } from "./sign-up-form";
 
 /**
  * Sign in and sign up, which are the same form with a different verb. Both
@@ -16,16 +17,23 @@ import { MIN_PASSWORD, postJson } from "@/lib/auth/client";
  */
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
-  const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
+  if (mode === "sign-up") return <SignUpForm next={next} />;
+  return <SignInForm next={next} />;
+}
+
+function SignInForm({ next }: { next: string }) {
+  const router = useRouter();
+  const params = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(params.get("error"));
 
-  const signingUp = mode === "sign-up";
+  // Sign-up has its own form (sign-up-form.tsx); the shared markup below keeps both branches.
+  const signingUp = false as boolean;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();

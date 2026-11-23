@@ -4,6 +4,7 @@ import { hasWhatsAppPlan } from "@/lib/billing/usage";
 import { databaseConfigured } from "@/lib/db/client";
 import { SCOPES_HEADER, USER_EMAIL_HEADER, USER_ID_HEADER } from "@/lib/auth/headers";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { isSuspended } from "@/lib/auth/suspension";
 
 /**
  * The single place a request is allowed in.
@@ -146,6 +147,8 @@ const PROTECTED_PAGES = [
   "/menu",
   "/connect",
   "/onboarding",
+  "/admin",
+  "/account",
 ];
 
 /** Pages a Lite account (analytics only) is redirected away from. */
@@ -190,7 +193,11 @@ export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
 
   const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
-  const user = session ? { id: session.userId, email: session.email } : null;
+  // A suspended account's cookie is treated as no cookie at all.
+  const user =
+    session && !(databaseConfigured() && (await isSuspended(session.userId)))
+      ? { id: session.userId, email: session.email }
+      : null;
 
   const { pathname } = request.nextUrl;
 
@@ -283,7 +290,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const key = await verifyApiKey(presented);
-  if (!key) {
+  if (!key || (await isSuspended(key.userId))) {
     return deny(
       401,
       "That API key is not valid.",

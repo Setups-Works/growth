@@ -321,7 +321,7 @@ export default function InboxPage() {
                       <div
                         className={`max-w-[80%] rounded-lg px-2.5 py-1.5 text-xs whitespace-pre-wrap ${
                           m.direction === "outgoing"
-                            ? "bg-foreground text-background"
+                            ? "bg-primary text-primary-foreground"
                             : "bg-background border"
                         }`}
                       >

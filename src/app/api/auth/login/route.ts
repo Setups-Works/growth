@@ -31,11 +31,14 @@ export async function POST(request: Request) {
     return tooMany();
   }
 
-  const [user] = await db()<{ id: string; email: string; password_hash: string }[]>`
-    select id, email, password_hash from users where lower(email) = ${email}
+  const [user] = await db()<{ id: string; email: string; password_hash: string; suspended_at: Date | null }[]>`
+    select id, email, password_hash, suspended_at from users where lower(email) = ${email}
   `;
   const ok = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
   if (!user || !ok) return Response.json({ error: "Incorrect email or password." }, { status: 401 });
+  if (user.suspended_at) {
+    return Response.json({ error: "This account has been suspended. Contact support." }, { status: 403 });
+  }
 
   return withSession(user);
 }

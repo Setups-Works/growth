@@ -19,6 +19,9 @@ import { FAQ } from "@/lib/marketing/faq";
 import { ANALYTICS_MODULES, WHATSAPP_MODULES } from "@/lib/marketing/plans";
 import { cn } from "@/lib/utils";
 
+/** Prices come from the plan catalog (Admin → Plans); refreshed at most once a minute. */
+export const revalidate = 60;
+
 export const metadata: Metadata = {
   title: "Pricing",
   description:

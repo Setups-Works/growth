@@ -433,12 +433,12 @@ export function WhatsAppSendPanel({
             Send on WhatsApp
           </CardTitle>
           <CardDescription className="text-xs">
-            WhatsApp is not available on this server yet.
+            Link your WhatsApp number to send campaigns.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild size="sm" variant="outline">
-            <Link href="/settings?section=whatsapp">Open WhatsApp settings</Link>
+            <Link href="/settings?section=whatsapp">Link WhatsApp</Link>
           </Button>
         </CardContent>
       </Card>

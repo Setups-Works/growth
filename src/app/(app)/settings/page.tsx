@@ -10,7 +10,6 @@ import {
   Loader2,
   LogOut,
   MessageCircle,
-  ShieldCheck,
   Check,
   Loader2 as Spinner,
   Store,
@@ -18,10 +17,11 @@ import {
   Trash2,
   TriangleAlert,
   Unplug,
+  UserRound,
 } from "lucide-react";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AUTH_MESSAGES } from "@/components/auth-outcome";
 import { hostOf, useConnectedStores } from "@/components/layout/store-switcher";
@@ -29,6 +29,7 @@ import { PageShell } from "@/components/dashboard/page-state";
 import { ApiKeysCard } from "@/components/settings/api-keys-card";
 import { BillingCard } from "@/components/settings/billing-card";
 import { ChangePasswordCard } from "@/components/settings/change-password-card";
+import { ProfileSection } from "@/components/settings/profile-section";
 import { SyncCard } from "@/components/settings/sync-card";
 import { WhatsAppSettingsCard } from "@/components/whatsapp/whatsapp-settings-card";
 import { useAnalytics } from "@/components/providers/analytics-provider";
@@ -38,13 +39,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format";
 
-type SectionId = "store" | "whatsapp" | "billing" | "security" | "developer" | "about";
+type SectionId = "profile" | "store" | "whatsapp" | "billing" | "security" | "developer" | "about";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Store }[] = [
+  { id: "profile", label: "Profile", icon: UserRound },
   { id: "store", label: "Store", icon: Store },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "billing", label: "Billing", icon: CreditCard },
@@ -62,7 +63,16 @@ interface RedactedConfig {
 }
 
 export default function SettingsPage() {
-  const router = useRouter();
+  // useSearchParams below needs a boundary to keep the route renderable.
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
+  const searchParams = useSearchParams();
   const pathname = usePathname();
   const { data, refresh } = useAnalytics();
   const [config, setConfig] = useState<RedactedConfig | null>(null);
@@ -86,10 +96,29 @@ export default function SettingsPage() {
   const selectSection = useCallback(
     (id: SectionId) => {
       setSection(id);
-      router.replace(`${pathname}?section=${id}`, { scroll: false });
+      /*
+       * The browser's own history API, which Next.js syncs into
+       * useSearchParams. router.replace would refetch the page from the
+       * server for a query change nothing on the server reads — and a link
+       * prefetch in the next section (Security's "Forgot it?") could
+       * overtake that navigation and snap the URL back.
+       */
+      const url = new URL(window.location.href);
+      url.searchParams.set("section", id);
+      window.history.replaceState(null, "", `${pathname}?${url.searchParams.toString()}`);
     },
-    [pathname, router],
+    [pathname],
   );
+
+  // Follows the URL too, so a link to another section (the account menu's
+  // "Your profile") switches section even when Settings is already open.
+  const requestedSection = searchParams.get("section");
+  useEffect(() => {
+    if (SECTIONS.some((s) => s.id === requestedSection)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSection(requestedSection as SectionId);
+    }
+  }, [requestedSection]);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -236,6 +265,8 @@ export default function SettingsPage() {
         </nav>
 
         <div className="min-w-0 space-y-5">
+          {section === "profile" ? <ProfileSection go={selectSection} /> : null}
+
           {section === "store" ? (
             <>
               {/* --- Current connection ------------------------------------------ */}
@@ -479,38 +510,6 @@ export default function SettingsPage() {
 
           {section === "about" ? (
             <>
-              {/* --- How data is handled ------------------------------------------ */}
-              <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldCheck className="size-4 text-muted-foreground" />
-            How your data is handled
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Point title="Read-only">
-            Only GET requests, to <code>/orders</code>, <code>/customers</code> and <code>/products</code>. The key
-            WooCommerce issues carries read scope, so there is no path by which this app could change your store.
-          </Point>
-          <Separator />
-          <Point title="No sample data">
-            There is no demo dataset anywhere in this app. Every number came from your store, so a figure can never
-            be a placeholder you mistook for real.
-          </Point>
-          <Separator />
-          <Point title="Stored in your own infrastructure">
-            The issued key lives in an owner-only file under <code>.data/</code> when self-hosted, or in the Redis
-            store you configured when running serverless. Either way it stays yours, is gitignored, and is never
-            sent to the browser.
-          </Point>
-          <Separator />
-          <Point title="Cached, not warehoused">
-            A fetched snapshot is cached in memory for 10 minutes and on disk for an hour so large stores load
-            instantly. Disconnecting deletes both, along with the key.
-          </Point>
-        </CardContent>
-      </Card>
-
       {/* --- Colophon ------------------------------------------------------ */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 py-5">
@@ -562,11 +561,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Point({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-xs font-semibold">{title}</p>
-      <p className="text-xs leading-relaxed text-muted-foreground">{children}</p>
-    </div>
-  );
-}

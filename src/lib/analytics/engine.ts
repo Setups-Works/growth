@@ -74,7 +74,7 @@ const DEFAULT_CUSTOMER_ROWS = 50_000;
 
 export function computeAnalytics(snapshot: StoreSnapshot, opts: AnalyticsOptions = {}): AnalyticsResult {
   const bounds = dataBounds(snapshot.orders);
-  const range = opts.allTime && bounds ? bounds : normaliseRange(opts.range, bounds);
+  const range = opts.allTime && bounds ? bounds : normaliseRange(opts.range, bounds, snapshot.fetchedAt);
   const prevRange = previousRange(range);
   const granularity = opts.granularity ?? inferGranularity(range);
 
@@ -164,7 +164,7 @@ function dataBounds(orders: WooOrder[]): DateRange | null {
   return { from: dayKey(new Date(min)), to: dayKey(new Date(max)) };
 }
 
-function normaliseRange(range: DateRange | undefined, bounds: DateRange | null): DateRange {
+function normaliseRange(range: DateRange | undefined, bounds: DateRange | null, syncedAt?: string): DateRange {
   if (range?.from && range?.to) {
     const from = startOfDay(new Date(range.from));
     const to = endOfDay(new Date(range.to));
@@ -172,9 +172,15 @@ function normaliseRange(range: DateRange | undefined, bounds: DateRange | null):
       return { from: dayKey(from), to: dayKey(to) };
     }
   }
-  // Default: the last 30 days of data we actually have, not of wall-clock time —
-  // otherwise a store with stale data shows an empty dashboard.
-  const end = bounds ? new Date(bounds.to) : new Date();
+  /*
+   * Default: the last 30 days up to today while the store is syncing normally.
+   * Only when syncs have stopped (none in two days) does it anchor to the
+   * newest order instead, so a dormant store doesn't show an empty dashboard.
+   * Anchoring to the newest order unconditionally showed last year as "the
+   * last 30 days" while a first sync was still importing history.
+   */
+  const syncedRecently = syncedAt ? Date.now() - Date.parse(syncedAt) < 2 * 24 * 60 * 60 * 1000 : false;
+  const end = syncedRecently || !bounds ? new Date() : new Date(bounds.to);
   const start = new Date(end);
   start.setDate(start.getDate() - 29);
   return { from: dayKey(start), to: dayKey(end) };
