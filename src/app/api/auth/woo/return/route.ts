@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicAppUrl } from "@/lib/woo/app-url";
 import { resolveTenant } from "@/lib/auth/tenant";
 import { readStoreConfig } from "@/lib/store/config";
 
@@ -15,9 +16,10 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const declined = params.get("success") === "0";
 
-  const redirect = (path: string) => NextResponse.redirect(new URL(path, request.url));
+  // The public address, not request.url — see the same note in ../start.
+  const redirect = (path: string) => NextResponse.redirect(new URL(path, publicAppUrl(request)));
 
-  if (declined) return redirect("/?auth=denied");
+  if (declined) return redirect("/connect?auth=denied");
 
   /*
    * The session already exists — the flow could not have started without one,

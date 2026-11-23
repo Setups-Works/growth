@@ -42,7 +42,7 @@ export const AUTH_MESSAGES: Record<string, { title: string; detail: string; tone
   https_required: {
     title: "This app needs to be served over HTTPS",
     detail:
-      "WooCommerce refuses to deliver credentials to a plain-HTTP callback. Run `npm run dev:https` locally, or set APP_URL to your public HTTPS address.",
+      "WooCommerce refuses to deliver credentials to a plain-HTTP callback. Set APP_URL to your public HTTPS address (a tunnel such as cloudflared works for local testing).",
     tone: "bad",
   },
   not_reachable: {

@@ -22,11 +22,16 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const raw = params.get("url");
 
+  /*
+   * Failures go back to /connect, which explains each code. The base is the
+   * public address (APP_URL), not request.url: behind Docker or a proxy the
+   * server sees its internal address (0.0.0.0:3000), which the browser can't open.
+   */
   const fail = (code: string, detail?: string) =>
     NextResponse.redirect(
       new URL(
-        `/?auth=${code}${detail ? `&detected=${encodeURIComponent(detail)}` : ""}`,
-        request.url,
+        `/connect?auth=${code}${detail ? `&detected=${encodeURIComponent(detail)}` : ""}`,
+        publicAppUrl(request),
       ),
     );
 
