@@ -1677,6 +1677,25 @@ B2s is enough) running the whole stack:
 Updating: `git pull && sudo docker compose --profile https up -d --build`.
 Backing up: `sudo docker compose exec db pg_dump -U growth growth > backup.sql`.
 
+### Automatic deploys (push to main)
+
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) deploys `main`
+to any Docker host over SSH after CI passes on it (or on demand from the
+Actions tab). It builds both images on GitHub's runner, copies them to the
+server with `docker load`, refreshes `docker-compose.yml` and `docker/`, and
+restarts only the services already running, then checks `/api/health`. The
+server never builds, so a 2 GB machine is enough; `.env` and the volumes stay
+on the server untouched.
+
+One-time setup: put the stack in `/opt/growth` on the server (with its
+`.env`), add a deploy key's public half to the server user's
+`~/.ssh/authorized_keys`, then in the repository settings add secrets
+`DEPLOY_HOST`, `DEPLOY_SSH_KEY` (the private half) and `DEPLOY_KNOWN_HOSTS`
+(`ssh-keygen -F <host>`), and variables `NEXT_PUBLIC_SITE_URL` and,
+optionally, `DEPLOY_USER` (default `ubuntu`), `DEPLOY_PATH` (default
+`/opt/growth`) and `NEXT_PUBLIC_RAZORPAY_KEY_ID`. Until the secrets exist the
+workflow skips. Moving to another server means changing those secrets.
+
 **Managed alternatives.** The app image also runs on Azure Container Apps or
 App Service for Containers, with Azure Database for PostgreSQL
 (`DATABASE_URL=...?sslmode=require`). The scheduler then needs a replacement —

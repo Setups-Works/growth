@@ -1,0 +1,130 @@
+name: Deploy
+
+# Deploys main to the production server after CI passes on it, or on demand.
+#
+# The server is any Linux host with Docker that already has the stack set up
+# in DEPLOY_PATH (its .env, volumes and data stay there; see README →
+# Deployment). Images are built here on GitHub's runner, copied over SSH and
+# loaded, so the server never builds anything. Moving to another server only
+# means changing the secrets below.
+#
+# Needs, in the repository settings:
+#   secret   DEPLOY_HOST           server IP or hostname
+#   secret   DEPLOY_SSH_KEY        private key allowed to log in as DEPLOY_USER
+#   secret   DEPLOY_KNOWN_HOSTS    the server's line(s) from ~/.ssh/known_hosts
+#   variable DEPLOY_USER           default: ubuntu
+#   variable DEPLOY_PATH           default: /opt/growth
+#   variable NEXT_PUBLIC_SITE_URL  e.g. https://growth.setups.works (build-time)
+#   variable NEXT_PUBLIC_RAZORPAY_KEY_ID  optional, build-time
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+    env:
+      DEPLOY_USER: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/growth' }}
+    steps:
+      # Until the server secrets are added, skip quietly instead of failing.
+      - name: Check deploy credentials
+        id: creds
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$KEY" ] || [ -z "$KNOWN" ]; then
+            echo "::notice::DEPLOY_HOST, DEPLOY_SSH_KEY or DEPLOY_KNOWN_HOSTS is not set; skipping deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          # The commit CI just passed, not whatever main is now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Build images
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          docker build -t growth-app \
+            --build-arg NEXT_PUBLIC_SITE_URL="${{ vars.NEXT_PUBLIC_SITE_URL }}" \
+            --build-arg NEXT_PUBLIC_RAZORPAY_KEY_ID="${{ vars.NEXT_PUBLIC_RAZORPAY_KEY_ID }}" \
+            .
+          docker build -t growth-cron docker/cron
+          docker save growth-app growth-cron | gzip -1 > images.tar.gz
+          ls -lh images.tar.gz
+
+      - name: Set up SSH
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          {
+            echo "Host prod"
+            echo "  HostName $HOST"
+            echo "  User $DEPLOY_USER"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  StrictHostKeyChecking yes"
+            echo "  ServerAliveInterval 30"
+          } > ~/.ssh/config
+
+      - name: Copy images and compose files
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          ssh prod "docker load" < <(gunzip -c images.tar.gz)
+          tar -cz docker-compose.yml docker/caddy docker/cron | ssh prod "tar -xz -C '$DEPLOY_PATH'"
+
+      # Restarts only the services already running, so a server that has the
+      # cron or caddy containers stopped (e.g. mid-migration) keeps them stopped.
+      # A server with nothing running gets the whole stack.
+      - name: Restart services
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          ssh prod "DEPLOY_PATH='$DEPLOY_PATH' GIT_SHA='${{ github.event.workflow_run.head_sha || github.sha }}' sh -s" <<'EOF'
+          set -e
+          cd "$DEPLOY_PATH"
+          running=$(docker compose --profile https ps --services --status running | tr '\n' ' ')
+          if [ -z "$running" ]; then
+            docker compose --profile https up -d --no-build
+          else
+            docker compose --profile https up -d --no-build $running
+          fi
+          echo "$GIT_SHA" > DEPLOYED_COMMIT
+          docker image prune -f >/dev/null
+          docker compose --profile https ps --format 'table {{.Service}}\t{{.Status}}'
+          EOF
+
+      - name: Check health
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          for i in $(seq 1 30); do
+            if ssh prod "curl -fsS -m 5 http://127.0.0.1:3000/api/health"; then echo; exit 0; fi
+            sleep 5
+          done
+          echo "The app did not become healthy in time." >&2
+          ssh prod "cd '$DEPLOY_PATH' && docker compose logs --tail 50 app" || true
+          exit 1
