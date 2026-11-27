@@ -2,7 +2,7 @@
  * The inbound menu bot.
  *
  * Everything else in this application reaches out: broadcasts and flows send,
- * the inbox lets a person reply. Nothing answers automatically, because nothing
+ * and a person replies from the phone. Nothing answers automatically, because nothing
  * here is running when a customer writes at three in the morning.
  *
  * This is the other direction, and it does not run in the web app — it runs in

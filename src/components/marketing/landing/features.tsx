@@ -82,7 +82,7 @@ const FEATURES: [typeof Gauge, string, string][] = [
   [
     Wifi,
     "Your own WhatsApp host, or Meta's",
-    "The analytics, flows, assistant and inbox are identical either way. Only the carrier changes.",
+    "The analytics, flows, assistant and auto-reply are identical either way. Only the carrier changes.",
   ],
   [
     Gauge,

@@ -45,7 +45,7 @@ export const DEFAULT_CATALOG: CatalogPlan[] = [
     features: [
       "Every analytics module — RFM, cohorts, LTV, products, inventory",
       "Report exports (PDF, Excel, CSV)",
-      "No WhatsApp campaigns, flows, inbox, order confirmations or assistant",
+      "No WhatsApp campaigns, flows, auto-reply, order confirmations or assistant",
       "Pay by UPI Autopay or card, cancel anytime",
     ],
     messageLimit: 0,

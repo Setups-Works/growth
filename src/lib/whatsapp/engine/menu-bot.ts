@@ -9,7 +9,7 @@ import type { MenuConfig, MenuOption } from "../menu";
  *   - While a menu is open, a reply equal to one of the current options' keys
  *     gets that option's text. If the option has children, the conversation
  *     moves into that submenu; otherwise the menu closes.
- *   - Anything else is ignored and left for a person in the inbox.
+ *   - Anything else is ignored and left for a person to answer on the phone.
  *   - Position is per conversation and expires after 15 minutes, so a stray
  *     "1" the next day is never read as a menu choice.
  */

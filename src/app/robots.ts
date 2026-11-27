@@ -23,7 +23,6 @@ export default function robots(): MetadataRoute.Robots {
         "/orders",
         "/campaigns",
         "/flows",
-        "/inbox",
         "/menu",
         "/reports",
         "/settings",

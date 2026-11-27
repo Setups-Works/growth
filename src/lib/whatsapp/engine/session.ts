@@ -14,7 +14,6 @@ import makeWASocket, {
   useMultiFileAuthState as multiFileAuthState,
   type ConnectionState,
   type WAMessage,
-  type WAMessageUpdate,
   type WASocket,
 } from "baileys";
 import pino from "pino";
@@ -72,7 +71,17 @@ interface Batch {
   completedAt: string | null;
 }
 
-interface Normalised extends store.StoredMessage {
+/** An incoming or outgoing message, read once and never stored. */
+interface Normalised {
+  id: string;
+  chatId: string;
+  fromMe: boolean;
+  sender: string | null;
+  pushName: string | null;
+  type: string;
+  body: string;
+  timestamp: number;
+  status: string | null;
   isGroup: boolean;
   replyJid: string;
 }
@@ -159,8 +168,6 @@ export class Session {
     sock.ev.on("creds.update", saveCreds);
     sock.ev.on("connection.update", (update) => void this.onConnection(sock, update, () => Boolean(state.creds.registered)));
     sock.ev.on("messages.upsert", (event) => void this.onMessages(sock, event.messages, event.type));
-    sock.ev.on("messages.update", (updates) => void this.onMessageUpdates(updates));
-    sock.ev.on("messaging-history.set", (event) => void this.onHistory(sock, event.messages));
   }
 
   private async onConnection(sock: WASocket, update: Partial<ConnectionState>, registered: () => boolean): Promise<void> {
@@ -335,7 +342,8 @@ export class Session {
       const m = await this.normalise(sock, msg);
       if (!m) continue;
       this.lastActive = new Date().toISOString();
-      await store.saveMessage(this.id, m).catch((e) => console.error("[whatsapp store]", e.message));
+      // Not stored: an incoming message is only checked for an opt-out and
+      // handed to the menu bot, then dropped.
 
       if (type === "notify" && !m.fromMe && m.type === "text") {
         const handled = await this.handleOptOut(m).catch((e) => {
@@ -346,23 +354,6 @@ export class Session {
           await this.runMenuBot(m).catch((e) => console.error(`[whatsapp menu ${this.id}]`, e.message));
         }
       }
-    }
-  }
-
-  private async onMessageUpdates(updates: WAMessageUpdate[]): Promise<void> {
-    for (const { key, update } of updates) {
-      const status = update?.status;
-      if (key?.id && typeof status === "number" && STATUS_NAMES[status]) {
-        await store.updateStatus(this.id, key.id, STATUS_NAMES[status]).catch(() => {});
-      }
-    }
-  }
-
-  private async onHistory(sock: WASocket, messages: WAMessage[]): Promise<void> {
-    // Recent history only, so the inbox has context without importing years.
-    for (const msg of messages.slice(-2000)) {
-      const m = await this.normalise(sock, msg);
-      if (m) await store.saveMessage(this.id, m).catch(() => {});
     }
   }
 
@@ -439,10 +430,8 @@ export class Session {
     await this.simulateTyping(sock, jid, content, kind);
     const sent = await sock.sendMessage(jid, content);
     this.lastActive = new Date().toISOString();
-    if (sent) {
-      const m = await this.normalise(sock, sent);
-      if (m) await store.saveMessage(this.id, { ...m, kind }).catch(() => {});
-    }
+    // Content-free: the guard only needs to count recent sends.
+    if (sent?.key?.id) await store.recordSend(this.id, sent.key.id, kind).catch(() => {});
     return {
       messageId: sent?.key?.id ?? "",
       timestamp: Number(sent?.messageTimestamp ?? Math.floor(Date.now() / 1000)),

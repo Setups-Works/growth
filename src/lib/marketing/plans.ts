@@ -34,7 +34,7 @@ export interface Plan {
   cta: string;
   href: string;
   limits: string[];
-  /** Whether this tier includes WhatsApp campaigns, flows and the inbox. */
+  /** Whether this tier includes WhatsApp campaigns, flows and the auto-reply menu. */
   whatsapp: boolean;
 }
 
@@ -88,7 +88,7 @@ export const WHATSAPP_MODULES = [
   "WhatsApp campaigns",
   "Automated flows",
   "Order confirmations & abandoned-checkout reminders",
-  "Shared inbox with customer history",
+  "Auto-reply menu",
   "The assistant",
 ];
 

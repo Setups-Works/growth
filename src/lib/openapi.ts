@@ -73,7 +73,6 @@ export const openApiDocument = {
     { name: "Flows", description: "Multi-step campaigns advanced on a schedule" },
     { name: "Recovery", description: "Abandoned-checkout reminders over WhatsApp" },
     { name: "Assistant", description: "Reads the store and proposes actions for approval" },
-    { name: "Inbox", description: "Conversations and replies" },
     { name: "Auth", description: "Email and password accounts, sessions and password reset" },
     { name: "API keys", description: "Credentials for calling this API from your own code" },
     { name: "Sync", description: "The local mirror of your WooCommerce store" },
@@ -1347,45 +1346,6 @@ export const openApiDocument = {
         responses: {
           200: { description: "Cancelled", content: json({ $ref: "#/components/schemas/Progress" }) },
           404: errorResponse("No such broadcast"),
-        },
-      },
-    },
-
-    "/api/whatsapp/chats": {
-      get: {
-        tags: ["Inbox"],
-        summary: "Conversations, matched to customers where possible",
-        description:
-          "Customer matching is time-boxed. A cold snapshot would otherwise make opening " +
-          "the inbox wait on a full order-history pull, so it degrades to raw numbers.",
-        responses: {
-          200: { description: "Conversations", content: json({ type: "object" }) },
-          409: errorResponse("WhatsApp is not enabled on this server"),
-        },
-      },
-    },
-
-    "/api/whatsapp/chats/{chatId}": {
-      get: {
-        tags: ["Inbox"],
-        summary: "Messages in one conversation",
-        parameters: [
-          { name: "chatId", in: "path", required: true, schema: { type: "string" } },
-          { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
-        ],
-        responses: { 200: { description: "Oldest first", content: json({ type: "object" }) } },
-      },
-      post: {
-        tags: ["Inbox"],
-        summary: "Reply, or start a conversation",
-        description:
-          "Accepts a chat id or a bare phone number. One-to-one, so no audience machinery " +
-          "is involved, but the opt-out list still applies.",
-        parameters: [{ name: "chatId", in: "path", required: true, schema: { type: "string" } }],
-        requestBody: { required: true, content: json({ $ref: "#/components/schemas/Message" }) },
-        responses: {
-          200: { description: "Sent", content: json({ type: "object" }) },
-          409: errorResponse("Session cannot send, or the number has opted out"),
         },
       },
     },

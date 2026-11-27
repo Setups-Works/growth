@@ -71,12 +71,12 @@ test.describe("with nothing connected", () => {
     expect((await res.json()).connected).toBe(false);
   });
 
-  test("session and chats refuse instead of throwing", async ({ request }) => {
-    for (const path of ["/api/whatsapp/session", "/api/whatsapp/chats"]) {
+  test("session refuses instead of throwing", async ({ request }) => {
+    for (const path of ["/api/whatsapp/session"]) {
       const res = await request.get(path);
       expect(res.status(), path).toBe(409);
-      // No engine in the test environment (and no store, for chats): a clear
-      // refusal naming what is missing, never a crash.
+      // No engine in the test environment: a clear refusal naming what is
+      // missing, never a crash.
       expect((await res.json()).error, path).toMatch(/whatsapp|store/i);
     }
   });

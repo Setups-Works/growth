@@ -197,20 +197,6 @@ deployment, so customer numbers never reach a third-party messaging service.
 </details>
 
 <details open>
-<summary><b>WhatsApp inbox</b></summary>
-
-- Conversations with **the customer behind each number**, not raw identifiers
-- Orders and lifetime spend beside every conversation
-- Link straight through to that customer's full profile
-- Thread view that **polls for replies** while open
-- Composer for text, media, or a product from your catalogue
-- **Start a conversation from a typed number**, without waiting to be messaged
-- Unread counts, and search across names and numbers
-- Opt-out list applies to one-to-one replies too
-
-</details>
-
-<details open>
 <summary><b>Inventory &amp; restock planning</b></summary>
 
 - **Days of cover** per SKU from stock and observed velocity
@@ -381,11 +367,6 @@ creation and attachment · dry run · test send · typed confirmation · opt-out
 · paced sending with jitter · resumable jobs · automatic reconnect after restarts · live
 progress and stop control
 
-**Inbox** — conversations matched to customers · order count and lifetime spend
-beside each · link to full profile · live reply polling · text, media and product
-replies · start a conversation from a number · unread counts · search across names
-and numbers · opt-out enforced
-
 </details>
 
 <details>
@@ -432,11 +413,6 @@ Build an audience, choose a template, attach a coupon and a product, dry-run it,
 test it, then send. Plus campaign performance from `utm_campaign` and coupon
 return-on-discount.
 
-### Inbox
-WhatsApp conversations with the customer behind each number, their order count
-and spend alongside, and a composer that sends text, media or a catalogue
-product.
-
 ### Inventory
 Days of cover, reorder points, suggested quantities, revenue at risk and capital
 tied up, with a CSV export shaped as a draft purchase order.
@@ -465,7 +441,6 @@ payment and coupon performance; a projection with a 95% band.
 | `g` `i` | Inventory |
 | `g` `o` | Orders |
 | `g` `m` | Campaigns |
-| `g` `w` | Inbox |
 | `g` `r` | Reports |
 | `g` `s` | Settings |
 
@@ -644,7 +619,6 @@ src/
 │   │   ├── acquisition/      New vs returning, channels, devices
 │   │   ├── cohorts/          Retention triangle, LTV curve
 │   │   ├── campaigns/        Audience builder + WhatsApp send panel
-│   │   ├── inbox/            WhatsApp conversations
 │   │   ├── products/         ABC, refund rate, affinity
 │   │   ├── inventory/        Restock planner, reorder points
 │   │   ├── orders/           Register, payments, coupons
@@ -1103,7 +1077,7 @@ Every message from every feature goes through one queue per number
 
 | Protection | What it does |
 |---|---|
-| One queue, with priority | Nothing bursts. Inbox and menu replies go first, then order confirmations and checkout reminders, then campaigns and flows. |
+| One queue, with priority | Nothing bursts. Menu replies go first, then order confirmations and checkout reminders, then campaigns and flows. |
 | Human-like pacing | Random gaps between messages, a "typing…" indicator before each, and a 1–3 minute break every 15–25 marketing messages. |
 | Marketing limits + warm-up | Campaigns and flows stop at a per-day and per-hour limit (Settings → WhatsApp). A newly linked number starts at 30/day and rises to your limit over ~30 days. Transactional messages and replies are never capped. |
 | Quiet hours | No campaigns or flows at night (default 21:00–09:00, `WHATSAPP_TIMEZONE`). |
@@ -1387,7 +1361,7 @@ customer sends "hi"
 Menus nest up to three deep. Position is per conversation and expires after 15
 minutes, so a stray `1` the next day is never read as a menu choice. Anything
 that is neither the trigger nor a menu choice is left alone for a person to
-answer in the inbox.
+answer on the phone.
 
 **Set a trigger word.** The match is exact and case-insensitive, so `hi` opens
 the menu while `this` and `hi there` are ignored. Left empty, the trigger

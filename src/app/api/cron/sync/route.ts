@@ -83,11 +83,11 @@ export async function POST(request: Request) {
        * Warms the shared analytics cache (Postgres bytea, see
        * analytics/shared-cache.ts) with this store's default-range figures
        * right here, once, in the sync job -- rather than leaving the first
-       * dashboard/inbox/product-search request after this sync to pay for
+       * dashboard/product-search request after this sync to pay for
        * it. This used to warm a whole-snapshot Redis cache instead; that
        * design didn't survive contact with a real store (188MB serialized on
        * a 22,000-order store, timing out on every write) and warming the
-       * derived analytics result is both what dashboard/inbox actually read
+       * derived analytics result is both what dashboard actually read
        * and, at ~1.4MB gzipped, well within what a cache entry should be.
        * `lastSyncAt` has to be re-read fresh rather than reused from the row
        * fetched before this loop started -- syncStore() is what just updated

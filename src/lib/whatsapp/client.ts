@@ -29,31 +29,6 @@ export interface WhatsAppSession {
   engineLoaded: boolean;
 }
 
-/** A conversation, as listed by the engine. */
-export interface WhatsAppChat {
-  id: string;
-  name: string | null;
-  isGroup: boolean;
-  unreadCount: number;
-  timestamp: number;
-  lastMessage?: string;
-}
-
-/** One stored message. */
-export interface WhatsAppMessage {
-  id: string;
-  waMessageId: string;
-  chatId: string;
-  from: string;
-  to: string;
-  body: string;
-  type: string;
-  direction: "incoming" | "outgoing";
-  timestamp: number;
-  status: string | null;
-  createdAt: string;
-}
-
 export interface NumberCheck {
   number: string;
   exists: boolean;
@@ -136,22 +111,6 @@ export class WhatsAppClient {
     return (await this.session()).toJSON();
   }
 
-  /** Open conversations, newest first. */
-  listChats(limit = 50): Promise<WhatsAppChat[]> {
-    return this.call("chats", async () => {
-      const { listChats } = await import("./engine/store");
-      return listChats(this.sessionId, Math.min(200, Math.max(1, limit)));
-    });
-  }
-
-  /** Stored messages for one conversation, oldest first. */
-  getMessages(chatId: string, limit = 50): Promise<WhatsAppMessage[]> {
-    return this.call("messages", async () => {
-      const { listMessages } = await import("./engine/store");
-      return listMessages(this.sessionId, chatId, Math.min(500, Math.max(1, limit)));
-    });
-  }
-
   /** Gets the session running, whether or not it already was. Idempotent. */
   ensureStarted(): Promise<WhatsAppSession> {
     return this.call("start", async () => {
@@ -213,7 +172,7 @@ export class WhatsAppClient {
    * `kind` decides how the safe-sending guard treats the message (see
    * engine/guard.ts): "marketing" (campaigns, flows) is paced, capped and
    * held in quiet hours; "transactional" (order confirmations, checkout
-   * reminders, test sends) is paced but never capped; "reply" (inbox, menu
+   * reminders, test sends) is paced but never capped; "reply" (menu
    * bot) goes first. A marketing send that can't go out now is refused with
    * status 429, so a scheduled job can retry on its next run.
    */

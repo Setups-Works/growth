@@ -58,7 +58,7 @@ interface SettingsResponse {
 /**
  * Links this account's WhatsApp number as a linked device — the same as
  * WhatsApp Web: scan the QR from WhatsApp → Linked devices on the phone.
- * Campaigns, flows, reminders, the inbox and the menu bot all send through it.
+ * Campaigns, flows, reminders and the menu bot all send through it.
  */
 export function WhatsAppSettingsCard() {
   const [state, setState] = useState<SettingsResponse | null>(null);
@@ -163,7 +163,7 @@ export function WhatsAppSettingsCard() {
             </CardTitle>
             <CardDescription className="text-xs">
               Link your WhatsApp Business (or personal) number as a linked device, like
-              WhatsApp Web. Campaigns, flows, reminders, the inbox and the menu bot all use it.
+              WhatsApp Web. Campaigns, flows, reminders and the menu bot all use it. Messages are never stored here — replies reach your phone.
             </CardDescription>
           </div>
           {state?.available !== false && state ? (

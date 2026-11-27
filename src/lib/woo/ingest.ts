@@ -38,7 +38,7 @@ export function orderForStorage(order: WooOrder): WooOrder {
 
 /**
  * What's kept of a customer: only the fields anything reads (the analytics
- * customer directory, the inbox and campaigns). WooCommerce's full record
+ * customer directory and campaigns). WooCommerce's full record
  * also carries the shipping address, username, role, avatar and meta data;
  * none of it is used, and on a real store it was two thirds of the row.
  */

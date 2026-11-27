@@ -229,7 +229,7 @@ function PlanEditor({
         </div>
 
         <div className="space-y-3 rounded-lg border border-line p-3">
-          <Toggle label="Includes WhatsApp" hint="Campaigns, flows, inbox, confirmations, assistant" checked={whatsapp} onChange={setWhatsapp} />
+          <Toggle label="Includes WhatsApp" hint="Campaigns, flows, auto-reply, confirmations, assistant" checked={whatsapp} onChange={setWhatsapp} />
           {whatsapp ? (
             <>
               <Toggle label="Unlimited messages" checked={unlimited} onChange={setUnlimited} />

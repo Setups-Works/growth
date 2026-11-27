@@ -139,7 +139,6 @@ const PROTECTED_PAGES = [
   "/reports",
   "/settings",
   "/assistant",
-  "/inbox",
   "/flows",
   "/abandoned-checkouts",
   "/order-confirmations",
@@ -158,7 +157,6 @@ const WHATSAPP_PAGES = [
   "/abandoned-checkouts",
   "/order-confirmations",
   "/menu",
-  "/inbox",
   "/whatsapp-cloud-pilot",
   "/assistant",
 ];

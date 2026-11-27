@@ -55,7 +55,7 @@ const STAGES = [
   {
     key: "customer",
     label: "Your customer",
-    note: "Replies land in the inbox",
+    note: "Replies reach your phone",
     owner: "—",
     render: () => <Users className="size-6 text-muted-foreground" strokeWidth={1.75} />,
   },
@@ -155,8 +155,8 @@ export function Automation() {
           <ShoppingCart className="mt-0.5 size-4 shrink-0 text-primary" />
           <p className="text-sm leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">And back again.</span> When the customer
-            replies, the thread lands in a shared inbox with their order history beside it — and if
-            they buy, the rest of the sequence is dropped before it sends.
+            replies, it reaches your phone like any other chat — nothing is stored here — and if they
+            buy, the rest of the sequence is dropped before it sends.
           </p>
         </div>
       </BlurFade>

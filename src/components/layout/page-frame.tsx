@@ -11,11 +11,11 @@ import { cn } from "@/lib/utils";
  *
  * Layout: 16px side padding on phones, 24px on tablets, 32px on desktop, and
  * a 1400px maximum width so tables and charts don't stretch across an
- * ultra-wide screen. Pages that are a full-height workspace (the assistant,
- * the inbox) keep the padding but skip the large heading.
+ * ultra-wide screen. Pages that are a full-height workspace (the assistant)
+ * keep the padding but skip the large heading.
  */
 
-const FULL_HEIGHT = ["/assistant", "/inbox"];
+const FULL_HEIGHT = ["/assistant"];
 
 export function PageFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();

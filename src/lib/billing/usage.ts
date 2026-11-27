@@ -162,7 +162,7 @@ export async function recordSend(userId: string, count = 1): Promise<void> {
  * a grandfathered legacy account does regardless of its `plan` value.
  *
  * Deliberately independent of `subscription_status`: a `past_due` Go account
- * still gets to see its Inbox and Campaigns pages during its grace window
+ * still gets to see its Campaigns and Flows pages during its grace window
  * (planMessageLimit is what actually blocks the send once the grace period
  * runs out) — Lite is different in kind, not in standing: there is no
  * subscription state that makes it include WhatsApp, so this reads plan type

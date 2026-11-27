@@ -31,6 +31,15 @@ export interface ChangelogRelease {
 
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    date: "2026-11-28",
+    changes: [
+      {
+        kind: "improved",
+        text: "WhatsApp messages are no longer stored — not what you send, and not what customers reply. Replies reach your phone like any other chat, and messages saved before today have been deleted. The Inbox page is gone as a result; campaigns, flows, reminders, order confirmations and the auto-reply menu work as before.",
+      },
+    ],
+  },
+  {
     date: "2026-11-23",
     title: "Setups Works Growth, and WhatsApp by QR code",
     changes: [
