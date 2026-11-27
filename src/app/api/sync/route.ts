@@ -64,7 +64,7 @@ export async function POST(request: Request) {
      * cron route -- this is the "just connected" / "manual re-sync" path per
      * this route's own doc comment, and it's exactly the moment someone is
      * about to look at their dashboard. Without this, the cache stays cold
-     * until the next cron cycle, and that first dashboard/inbox view pays
+     * until the next cron cycle, and that first dashboard view pays
      * for a full Postgres reassembly instead of a cache hit.
      *
      * `store.lastSyncAt` above is from before syncStore() ran -- re-read it
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
      * to warm a whole-snapshot Redis cache; found by testing against a real
      * store connection that that design doesn't survive real scale (188MB
      * serialized, timing out on every write) -- warming the derived
-     * analytics result instead is both what the dashboard/inbox actually
+     * analytics result instead is both what the dashboard actually
      * read and small enough (~1.4MB gzipped) to actually cache.
      */
     const [{ last_sync_at: freshLastSyncAt }] = await db()<{ last_sync_at: Date | null }[]>`

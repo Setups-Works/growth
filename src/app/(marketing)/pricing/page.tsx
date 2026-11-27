@@ -25,7 +25,7 @@ export const revalidate = 60;
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Lite for analytics alone, or Go/Plus to add WhatsApp campaigns, flows and the inbox. Choose how messages are carried: your own WhatsApp host with no per-message fee, or the official Cloud API with delivery backed by Meta.",
+    "Lite for analytics alone, or Go/Plus to add WhatsApp campaigns, flows and the auto-reply menu. Choose how messages are carried: your own WhatsApp host with no per-message fee, or the official Cloud API with delivery backed by Meta.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -115,7 +115,7 @@ export default function PricingPage() {
           <BlurFade delay={0.16} inView>
             <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg">
               Lite is every analytics module, nothing else. Go and Plus add WhatsApp campaigns,
-              flows and the inbox, sized by how many messages you send a month — not by what the
+              flows and the auto-reply menu, sized by how many messages you send a month — not by what the
               product will tell you about your store.
             </p>
           </BlurFade>
@@ -153,7 +153,7 @@ export default function PricingPage() {
         <SectionHeading
           eyebrow="Go & Plus add"
           title="WhatsApp, on top of the same analytics"
-          body="Lite doesn't include any of this — upgrade when campaigns, flows or a shared inbox actually become worth carrying WhatsApp for."
+          body="Lite doesn't include any of this — upgrade when campaigns, flows or an auto-reply menu actually become worth carrying WhatsApp for."
         />
         <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {WHATSAPP_MODULES.map((item, i) => (
@@ -171,7 +171,7 @@ export default function PricingPage() {
         <SectionHeading
           eyebrow="Delivery"
           title="Two ways to send. Same platform."
-          body="The analytics, the flows, the assistant and the inbox are identical either way. The only difference is what carries the messages — and that choice is a genuine trade-off, not an upsell."
+          body="The analytics, the flows, the assistant and the auto-reply menu are identical either way. The only difference is what carries the messages — and that choice is a genuine trade-off, not an upsell."
         />
 
         <div className="mt-10 grid gap-6 lg:grid-cols-2">

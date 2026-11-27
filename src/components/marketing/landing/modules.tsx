@@ -7,7 +7,6 @@ import {
   ChartColumnBig,
   Compass,
   FileDown,
-  Inbox,
   LineChart,
   Megaphone,
   MessageSquare,
@@ -134,8 +133,7 @@ const MODULES: { icon: typeof Users; title: string; body: string; metric: number
 ];
 
 /** Modules that also have a screen of their own, for the footer row. */
-const SURFACES: [typeof Inbox, string][] = [
-  [Inbox, "Shared inbox"],
+const SURFACES: [typeof MessageSquare, string][] = [
   [MessageSquare, "Auto-reply menu"],
   [ReceiptText, "Order register"],
 ];

@@ -177,7 +177,10 @@ in Settings → WhatsApp. Routes reach it only through `WhatsAppClient`
 library never reaches a browser bundle. Sockets live in a `globalThis`
 registry, so **the app must run as a single instance**; `src/instrumentation.ts`
 reconnects linked accounts at server start. The menu bot (`chat-flow`) is
-`engine/menu-bot.ts`; the inbox reads the `wa_messages` table. Pairing
+`engine/menu-bot.ts`. **WhatsApp messages are never stored** — incoming ones
+are read once (opt-outs, menu bot) and dropped, and `wa_messages` holds only a
+content-free row per send (no text, no recipient, pruned after 2 days) for the
+guard's caps; don't add anything that persists message text or numbers. Pairing
 credentials live under `.data/whatsapp` (the `app-data` volume), never in
 Postgres. `WHATSAPP_DISABLED=true` turns it all off (the test suite does).
 
@@ -185,7 +188,7 @@ Postgres. `WHATSAPP_DISABLED=true` turns it all off (the test suite does).
 the right `kind` to `WhatsAppClient.sendText/Image/Video` — `"marketing"` for
 campaigns and flows (paced, capped, warm-up, quiet hours), `"transactional"`
 (default) for order confirmations, checkout reminders and test sends, `"reply"`
-for the inbox and menu bot. Marketing that can't go out now throws a 429
+for the menu bot. Marketing that can't go out now throws a 429
 `WhatsAppApiError`; scheduled jobs must treat that as "try next run", not as a
 failure. Never add a send path that bypasses `Session.deliver`.
 

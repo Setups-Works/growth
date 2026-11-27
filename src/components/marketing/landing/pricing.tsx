@@ -39,7 +39,7 @@ export async function Pricing({ heading = true, footer = heading }: PricingProps
           align="center"
           eyebrow="Pricing"
           title="Analytics alone, or analytics plus WhatsApp."
-          body="Lite is every analytics module and nothing else. Go and Plus add WhatsApp campaigns, flows and the inbox, sized by how many messages you send a month — not by what the product will tell you about your store."
+          body="Lite is every analytics module and nothing else. Go and Plus add WhatsApp campaigns, flows and the auto-reply menu, sized by how many messages you send a month — not by what the product will tell you about your store."
         />
       ) : null}
 

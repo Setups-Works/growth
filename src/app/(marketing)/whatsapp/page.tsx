@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import { Check, Clock, Inbox, ShieldCheck, Ticket, Users } from "lucide-react";
+import { Check, Clock, Lock, ShieldCheck, Ticket, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/ui/blur-fade";
-import { BorderBeam } from "@/components/ui/border-beam";
 import { Iphone } from "@/components/ui/iphone";
 import { MagicCard } from "@/components/ui/magic-card";
 import { Marquee } from "@/components/ui/marquee";
-import { Separator } from "@/components/ui/separator";
 import {
   CampaignMock,
   FlowMock,
@@ -21,7 +19,7 @@ import { PhoneScreen } from "@/components/marketing/landing/phone-screen";
 export const metadata: Metadata = {
   title: "WhatsApp",
   description:
-    "Campaigns personalised from each customer's own history, automated flows that stop when they buy, an out-of-hours menu that knows when to fetch a person, and one shared inbox — from your own number, linked by scanning a QR code.",
+    "Campaigns personalised from each customer's own history, automated flows that stop when they buy, and an out-of-hours menu — from your own number, with no message ever stored, linked by scanning a QR code.",
   alternates: { canonical: "/whatsapp" },
 };
 
@@ -56,7 +54,7 @@ const CONTROLS: [typeof Users, string, string][] = [
   [Users, "Segment", "Champions, at risk, hibernating — any of the ten"],
   [Ticket, "Coupon", "Created in WooCommerce, restricted to the product"],
   [Clock, "Schedule", "Send now, or steps days apart"],
-  [Inbox, "Replies", "Every thread in one shared inbox"],
+  [Lock, "Replies", "Answered on your phone — never stored here"],
 ];
 
 const GUARDS = [
@@ -66,13 +64,7 @@ const GUARDS = [
   "Phone numbers are resolved server-side, never sent to the browser",
   "Nobody enters the same flow twice",
   "Remaining flow steps are dropped the moment they order",
-];
-
-const INBOX: [string, string, string][] = [
-  ["A", "Yes please — can you send two?", "Champion · 14 orders"],
-  ["R", "Where is my order?", "Loyal · 6 orders"],
-  ["M", "Is this safe for sensitive skin?", "Handed over by the menu"],
-  ["S", "STOP", "Opt-out recorded"],
+  "Message text is never stored — not what you send, not what customers reply",
 ];
 
 /** A phone mock at the size this page uses everywhere. */
@@ -199,67 +191,6 @@ export default function WhatsAppPage() {
           </Marquee>
           <div className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-linear-to-r from-background to-transparent sm:w-24" />
           <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-linear-to-l from-background to-transparent sm:w-24" />
-        </div>
-      </Section>
-
-      {/* ---- Inbox ---------------------------------------------------------------- */}
-      <Section id="inbox">
-        <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
-          <BlurFade inView>
-            <Badge variant="secondary" className="gap-1.5">
-              <Inbox className="size-3" />
-              Shared inbox
-            </Badge>
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
-              Every reply in one place
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-              A campaign that nobody answers is a broadcast. Replies land in a shared inbox next to
-              the customer&rsquo;s own order history, so whoever picks it up already knows what they
-              bought.
-            </p>
-            <ul className="mt-5 space-y-2.5">
-              {[
-                "Their orders and segment beside the thread",
-                "Threads the bot handed over are marked",
-                "Opt-outs recorded the moment they ask",
-              ].map((item) => (
-                <li key={item} className="flex gap-2.5 text-sm">
-                  <Check className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </BlurFade>
-
-          <BlurFade delay={0.1} inView>
-            <div className="relative overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-              <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2.5">
-                <BrandMark icon={BRANDS.whatsapp} className="size-3.5 text-muted-foreground" />
-                <p className="text-xs font-medium">Inbox — replies, with context</p>
-              </div>
-              {INBOX.map(([initial, message, meta], i) => (
-                <div key={message}>
-                  {i > 0 ? <Separator /> : null}
-                  <div className="flex items-start gap-3 px-4 py-3">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                      {initial}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{message}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{meta}</span>
-                    </span>
-                  </div>
-                </div>
-              ))}
-              <BorderBeam
-                size={130}
-                duration={11}
-                colorFrom="var(--primary)"
-                colorTo="color-mix(in oklch, var(--chart-3) 70%, transparent)"
-              />
-            </div>
-          </BlurFade>
         </div>
       </Section>
 

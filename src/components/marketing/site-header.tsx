@@ -12,7 +12,6 @@ import {
   ChartColumnBig,
   Clock,
   Code2,
-  Inbox,
   Megaphone,
   Menu,
   MessageCircle,
@@ -148,12 +147,6 @@ const MENU: { label: string; blurb: string; items: MenuItem[] }[] = [
         href: "/whatsapp#auto-reply",
         description: "Answers at 3am, fetches a person",
         icon: Clock,
-      },
-      {
-        label: "Shared inbox",
-        href: "/whatsapp#inbox",
-        description: "Every reply, with their history",
-        icon: Inbox,
       },
       {
         label: "API reference",

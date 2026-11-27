@@ -239,7 +239,7 @@ function SettingsContent() {
           <AlertTitle>That page needs Go or Plus</AlertTitle>
           <AlertDescription>
             The Lite plan is analytics only. Upgrade below to use WhatsApp campaigns, flows, the
-            inbox and order confirmations.
+            auto-reply menu and order confirmations.
           </AlertDescription>
         </Alert>
       ) : null}
