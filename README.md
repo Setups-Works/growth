@@ -1682,7 +1682,8 @@ Backing up: `sudo docker compose exec db pg_dump -U growth growth > backup.sql`.
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) deploys `main`
 to any Docker host over SSH after CI passes on it (or on demand from the
 Actions tab). It builds both images on GitHub's runner, copies them to the
-server with `docker load`, refreshes `docker-compose.yml` and `docker/`, and
+server with `docker load`, refreshes `docker-compose.yml` and `docker/cron`
+(the server's own `docker/caddy/Caddyfile` is left alone), and
 restarts only the services already running, then checks `/api/health`. The
 server never builds, so a 2 GB machine is enough; `.env` and the volumes stay
 on the server untouched.

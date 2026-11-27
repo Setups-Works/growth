@@ -92,11 +92,13 @@ jobs:
             echo "  ServerAliveInterval 30"
           } > ~/.ssh/config
 
+      # docker/caddy is left alone: the server's Caddyfile is its own config,
+      # like .env (e.g. a different certificate issuer).
       - name: Copy images and compose files
         if: steps.creds.outputs.ready == 'true'
         run: |
           ssh prod "docker load" < <(gunzip -c images.tar.gz)
-          tar -cz docker-compose.yml docker/caddy docker/cron | ssh prod "tar -xz -C '$DEPLOY_PATH'"
+          tar -cz docker-compose.yml docker/cron | ssh prod "tar -xz -C '$DEPLOY_PATH'"
 
       # Restarts only the services already running, so a server that has the
       # cron or caddy containers stopped (e.g. mid-migration) keeps them stopped.
